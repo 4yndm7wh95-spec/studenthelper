@@ -2,6 +2,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 let playwright; try { playwright = require('playwright'); } catch { playwright = require('C:/Users/kkk/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/node_modules/playwright'); }
 async function run() {
+  fs.mkdirSync('prototype/screenshots',{recursive:true});
   const browser = await playwright.chromium.launch({headless:true,channel:'msedge'});
   try {
     const context = await browser.newContext({viewport:{width:1440,height:900}});

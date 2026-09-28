@@ -11,3 +11,4 @@ deliverables/
 **/*.mobileprovision
 **/node_modules/
 **/__pycache__/
+prototype/screenshots/

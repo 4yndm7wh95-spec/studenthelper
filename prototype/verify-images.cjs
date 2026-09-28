@@ -2,7 +2,7 @@ const assert=require('node:assert/strict'),fs=require('node:fs');
 const {messages,imageURL}=require('./chat-payload.cjs');
 let playwright;try{playwright=require('playwright')}catch{playwright=require('C:/Users/kkk/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/node_modules/playwright')}
 async function paste(page,data){await page.evaluate(data=>{const bytes=Uint8Array.from(atob(data.split(',')[1]),c=>c.charCodeAt(0)),dt=new DataTransfer();dt.items.add(new File([bytes],'clipboard.png',{type:'image/png'}));document.querySelector('#answer-input').dispatchEvent(new ClipboardEvent('paste',{clipboardData:dt,bubbles:true,cancelable:true}))},data);await page.waitForSelector('.yb-thumbnail img.ready')}
-(async()=>{const browser=await playwright.chromium.launch({headless:true,channel:'msedge'});const errors=[];try{
+(async()=>{const browser=await playwright.chromium.launch({headless:true,channel:'msedge'});const errors=[];try{fs.mkdirSync('prototype/screenshots',{recursive:true});
  const context=await browser.newContext({viewport:{width:1440,height:900}}),page=await context.newPage(),requests=[];
  page.on('pageerror',error=>errors.push(error.message));
  await page.route('**/api/chat',async route=>{requests.push(route.request().postDataJSON());await route.fulfill({status:requests.length===1?502:200,contentType:'application/json',body:JSON.stringify(requests.length===1?{error:'测试重试'}:{reply:'先看这一步，你能写出等式吗？'})})});
