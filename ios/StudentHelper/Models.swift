@@ -4,6 +4,19 @@ struct LearningMessage: Identifiable, Codable, Equatable {
     var id = UUID()
     var role: String
     var text: String
+    var images: [LearningImage]?
+}
+
+struct LearningImage: Identifiable, Codable, Equatable {
+    var id = UUID()
+    var name: String
+    var width: Int
+    var height: Int
+    var size: Int
+}
+
+enum AttachmentDestination: Hashable {
+    case chat(UUID), course(String)
 }
 
 struct LearningChat: Identifiable, Codable {
@@ -19,6 +32,8 @@ struct LearningChat: Identifiable, Codable {
     var replyInProgress = false
     var questionQueue: [QueuedProblem]?
     var questionIndex: Int?
+    var draftImages: [LearningImage]?
+    var titleEdited: Bool?
 }
 
 struct QueuedProblem: Codable { var number: Int; var text: String }
@@ -29,11 +44,12 @@ struct CourseFile: Identifiable, Codable {
     var course: String
     var size: Int64 = 0
     var addedAt = Date()
+    var image: LearningImage?
 }
 
 struct LearningState: Codable {
-    var courses = ["概率论与数理统计", "高等数学", "线性代数"]
-    var selectedCourse = "概率论与数理统计"
+    var courses: [String] = []
+    var selectedCourse = ""
     var chats: [LearningChat] = []
     var currentID: UUID?
     var files: [CourseFile] = []

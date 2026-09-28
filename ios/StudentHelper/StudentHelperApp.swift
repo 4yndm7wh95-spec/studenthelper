@@ -22,7 +22,7 @@ struct WorkspaceView: View {
         TabView(selection: $tab) {
             NavigationStack { ChatView() }.tabItem { Label("聊天", systemImage: "bubble.left.and.text.bubble.right") }.tag(WorkspaceTab.chat)
             NavigationStack { RecordsView(tab: $tab) }.tabItem { Label("记录", systemImage: "list.bullet.clipboard") }.tag(WorkspaceTab.records)
-            NavigationStack { FilesView() }.tabItem { Label("文件", systemImage: "folder") }.tag(WorkspaceTab.files)
+            NavigationStack { FilesView(tab: $tab) }.tabItem { Label("文件", systemImage: "folder") }.tag(WorkspaceTab.files)
             NavigationStack { ReviewListView() }.tabItem { Label("复习", systemImage: "arrow.counterclockwise.circle") }.tag(WorkspaceTab.review)
         }
         .toolbarBackground(Notebook.side, for: .tabBar).toolbarBackground(.visible, for: .tabBar)

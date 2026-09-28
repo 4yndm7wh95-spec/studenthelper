@@ -6,11 +6,11 @@ struct ChatView: View {
     @Environment(\.accessibilityReduceMotion) private var reduced
     @FocusState private var inputFocused: Bool
     @State private var sessionsOpen = false
-    @State private var importerOpen = false
     @State private var isNearBottom = true
     @State private var showNewReply = false
     private var draft: Binding<String> { Binding(get: { store.current?.draft ?? "" }, set: { store.updateDraft($0) }) }
     private var pending: Bool { store.current.map { store.pending.contains($0.id) } ?? false }
+    private var importing: Bool { store.state.currentID.map { store.importing.contains(.chat($0)) } ?? false }
 
     var body: some View {
         ScrollViewReader { proxy in
@@ -59,11 +59,22 @@ struct ChatView: View {
         }
         .safeAreaInset(edge: .bottom, spacing: 0) { composer }
         .sheet(isPresented: $sessionsOpen) { SessionsView().presentationDetents([.medium, .large]).presentationDragIndicator(.visible).presentationCornerRadius(20) }
-        .fileImporter(isPresented: $importerOpen, allowedContentTypes: [.item], allowsMultipleSelection: true) { result in switch result { case .success(let urls): store.addFiles(urls, toCourse: false); case .failure: store.notice = "文件未添加。" } }
     }
 
     private var composer: some View {
         VStack(spacing: 8) {
+            if let images = store.current?.draftImages, !images.isEmpty {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 12) {
+                        ForEach(images) { image in
+                            ImagePreviewButton(image: image).frame(width: 84, height: 84).background(.white, in: RoundedRectangle(cornerRadius: 10))
+                                .overlay(alignment: .topTrailing) {
+                                    Button { store.removeDraftImage(image) } label: { Image(systemName: "xmark.circle.fill").font(.system(size: 22)).symbolRenderingMode(.palette).foregroundStyle(Notebook.secondary, .white).frame(width: 44, height: 44) }.offset(x: 10, y: -10).accessibilityLabel("移除图片：" + image.name)
+                                }
+                        }
+                    }.padding(.top, 6).padding(.trailing, 8)
+                }
+            }
             if !(store.current?.messages.isEmpty ?? true) {
                 HStack(spacing: 8) {
                     if store.canNext { Button { Task { await store.nextQuestion() } } label: { Label("下一题", systemImage: "plus.square") } }
@@ -72,10 +83,10 @@ struct ChatView: View {
                 }.font(.caption).buttonStyle(.bordered).tint(Notebook.secondary).frame(minHeight: 44).disabled(pending)
             }
             HStack(alignment: .bottom, spacing: 8) {
-                if !(store.current?.course.isEmpty ?? true) { Button { inputFocused = false; importerOpen = true } label: { Image(systemName: "paperclip").frame(width: 44, height: 44) }.accessibilityLabel("添加作业") }
+                ImageImportButton()
                 TextField(store.current?.waitingQuestion == true ? "发下一道题…" : "说说你的想法…", text: draft, axis: .vertical).lineLimit(1...5).reading().padding(.horizontal, 12).padding(.vertical, 8).frame(minHeight: 44).background(.white, in: RoundedRectangle(cornerRadius: 10)).overlay(RoundedRectangle(cornerRadius: 10).stroke(inputFocused ? Notebook.accent : Notebook.line, lineWidth: 1)).focused($inputFocused)
                 Button { if pending { store.stop() } else { Task { await store.send(store.current?.draft ?? "") } } } label: { Image(systemName: pending ? "stop.circle.fill" : "arrow.up.circle.fill").font(.system(size: 36)).frame(width: 44, height: 44).contentTransition(reduced ? .opacity : .symbolEffect(.replace)) }
-                    .disabled(!pending && (store.current?.draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true)).accessibilityLabel(pending ? "停止" : "发送")
+                    .disabled(!pending && (importing || ((store.current?.draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true) && (store.current?.draftImages?.isEmpty ?? true)))).accessibilityLabel(pending ? "停止" : "发送")
                     .animation(reduced ? .easeInOut(duration: 0.15) : .spring(response: 0.25, dampingFraction: 0.9), value: pending)
             }
         }.padding(.horizontal, 12).padding(.vertical, 8).background(Notebook.paper).overlay(alignment: .top) { Rectangle().fill(Notebook.line).frame(height: 1) }

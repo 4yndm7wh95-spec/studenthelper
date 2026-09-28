@@ -2,8 +2,13 @@ import SwiftUI
 
 struct CoursePicker: View {
     @EnvironmentObject private var store: LearningStore
+    @State private var newCourseOpen = false
     var body: some View {
-        Menu { ForEach(store.state.courses, id: \.self) { course in Button { store.state.selectedCourse = course; store.save() } label: { if course == store.state.selectedCourse { Label(course, systemImage: "checkmark") } else { Text(course) } } } } label: { Label(store.state.selectedCourse.isEmpty ? "选择课程" : store.state.selectedCourse, systemImage: "book.closed").font(.footnote).lineLimit(1).frame(minHeight: 44) }
+        Menu {
+            ForEach(store.state.courses, id: \.self) { course in Button { store.state.selectedCourse = course; store.save() } label: { if course == store.state.selectedCourse { Label(course, systemImage: "checkmark") } else { Text(course) } } }
+            Button { newCourseOpen = true } label: { Label("新建课程", systemImage: "plus") }
+        } label: { Label(store.state.selectedCourse.isEmpty ? "选择课程" : store.state.selectedCourse, systemImage: "book.closed").font(.footnote).lineLimit(1).frame(minHeight: 44) }
+        .sheet(isPresented: $newCourseOpen) { NewCourseView { _ in }.presentationDetents([.medium]).presentationDragIndicator(.visible).presentationCornerRadius(20) }
     }
 }
 

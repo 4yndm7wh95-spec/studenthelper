@@ -17,6 +17,7 @@ DEVICE=$(xcrun simctl create StudentHelper-iPhone16Pro com.apple.CoreSimulator.S
 trap 'xcrun simctl shutdown "$DEVICE" >/dev/null 2>&1 || true' EXIT
 xcrun simctl boot "$DEVICE"
 xcrun simctl bootstatus "$DEVICE" -b
+xcrun simctl addmedia "$DEVICE" Tests/Fixtures/homework.png
 xcrun simctl status_bar "$DEVICE" override --time '9:41' --dataNetwork wifi --wifiMode active --wifiBars 3 --batteryState charged --batteryLevel 100
 set -o pipefail
 xcodebuild -project StudentHelper.xcodeproj -scheme StudentHelper -configuration Debug \
@@ -42,6 +43,9 @@ xcodebuild -project StudentHelper.xcodeproj -scheme StudentHelper -configuration
   -destination "platform=iOS Simulator,id=$DEVICE" -derivedDataPath build/simulator \
   -parallel-testing-enabled NO -resultBundlePath build/model-tests.xcresult \
   CODE_SIGNING_ALLOWED=YES CODE_SIGN_IDENTITY=- test-without-building | tee model-tests.log
+DATA_CONTAINER=$(xcrun simctl get_app_container "$DEVICE" com.studenthelper.yibu data)
+cp "$DATA_CONTAINER/Library/Application Support/ios-vision-request.json" build/ios-vision-request.json
+xcrun xcresulttool export attachments --path build/model-tests.xcresult --output-path build/ui-previews
 xcrun simctl terminate "$DEVICE" com.studenthelper.yibu >/dev/null 2>&1 || true
 xcrun simctl launch "$DEVICE" com.studenthelper.yibu --model-settings-preview
 sleep 3

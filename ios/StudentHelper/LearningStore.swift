@@ -1,4 +1,6 @@
 import SwiftUI
+import PhotosUI
+import UniformTypeIdentifiers
 
 @MainActor
 final class LearningStore: ObservableObject {
@@ -6,18 +8,26 @@ final class LearningStore: ObservableObject {
     @Published var pending = Set<UUID>()
     @Published var storageError: String?
     @Published var notice: String?
+    @Published var importing = Set<AttachmentDestination>()
     private var requests: [UUID: Task<Void, Never>] = [:]
     private let fileURL: URL
+    let images: ImageRepository
     var current: LearningChat? { state.chats.first { $0.id == state.currentID } }
     var backend: String {
         get { UserDefaults.standard.string(forKey: "backendURL") ?? "" }
         set { UserDefaults.standard.set(newValue, forKey: "backendURL"); objectWillChange.send() }
     }
 
-    init() {
+    init(fileURL: URL? = nil) {
         let folder = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-        fileURL = folder.appendingPathComponent("learning-state.json")
-        if let data = try? Data(contentsOf: fileURL), let saved = try? JSONDecoder().decode(LearningState.self, from: data) {
+        self.fileURL = fileURL ?? folder.appendingPathComponent("learning-state.json")
+        images = ImageRepository(folder: self.fileURL.deletingLastPathComponent().appendingPathComponent("image-assets", isDirectory: true))
+        #if DEBUG
+        let resetForUITest = fileURL == nil && ProcessInfo.processInfo.arguments.contains("--ui-tests-reset")
+        #else
+        let resetForUITest = false
+        #endif
+        if !resetForUITest, let data = try? Data(contentsOf: self.fileURL), let saved = try? JSONDecoder().decode(LearningState.self, from: data) {
             state = saved
         } else {
             var initial = LearningState()
@@ -39,6 +49,7 @@ final class LearningStore: ObservableObject {
             try data.write(to: fileURL, options: [.atomic, .completeFileProtection])
         } catch { storageError = "暂时无法保存，请检查设备空间。" }
     }
+    private func collectImages() { if importing.isEmpty { images.removeUnreferenced(in: state) } }
     func select(_ chat: LearningChat) { state.currentID = chat.id; state.selectedCourse = chat.course; save() }
     func newChat(course: String? = nil) {
         let chat = LearningChat(title: "新对话", course: course ?? state.selectedCourse)
@@ -50,25 +61,44 @@ final class LearningStore: ObservableObject {
         if !state.courses.contains(clean) { state.courses.append(clean) }
         state.selectedCourse = clean; save()
     }
+    func deleteCourse(_ name: String) {
+        guard state.courses.contains(name) else { return }
+        let removed = state.chats.filter { $0.course == name }
+        for chat in removed { requests[chat.id]?.cancel() }
+        state.courses.removeAll { $0 == name }
+        state.chats.removeAll { $0.course == name }
+        state.files.removeAll { $0.course == name }
+        state.subjects.removeValue(forKey: name); state.courseNotes.removeValue(forKey: name)
+        if state.selectedCourse == name { state.selectedCourse = state.courses.first ?? "" }
+        if !state.chats.contains(where: { $0.id == state.currentID }) {
+            state.currentID = state.chats.first(where: { $0.course == state.selectedCourse })?.id ?? state.chats.first?.id
+            if let current { state.selectedCourse = current.course }
+        }
+        if state.chats.isEmpty { newChat(course: state.selectedCourse) }
+        save(); collectImages()
+    }
+    func renameChat(_ id: UUID, to title: String) {
+        let clean = String(title.trimmingCharacters(in: .whitespacesAndNewlines).prefix(80))
+        guard !clean.isEmpty, let index = state.chats.firstIndex(where: { $0.id == id }) else { return }
+        state.chats[index].title = clean; state.chats[index].titleEdited = true; save()
+    }
     func updateDraft(_ text: String) {
         guard let index = state.chats.firstIndex(where: { $0.id == state.currentID }) else { return }
         state.chats[index].draft = text; save()
     }
-    func attach(names: [String], toCourse: Bool) {
-        if toCourse { state.files += names.map { CourseFile(name: $0, course: state.selectedCourse) } }
-        else if let index = state.chats.firstIndex(where: { $0.id == state.currentID }) {
-            state.chats[index].messages.append(LearningMessage(role: "user", text: "附件：" + names.joined(separator: "、")))
-        }
-        save()
-    }
     func send(_ text: String) async {
         let clean = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !clean.isEmpty, let id = state.currentID, !pending.contains(id), let index = state.chats.firstIndex(where: { $0.id == id }) else { return }
-        if state.chats[index].messages.isEmpty { state.chats[index].title = String(clean.prefix(22)) }
+        guard let id = state.currentID, !pending.contains(id), !importing.contains(.chat(id)), let index = state.chats.firstIndex(where: { $0.id == id }) else { return }
+        let attachments = state.chats[index].draftImages ?? []
+        guard !clean.isEmpty || !attachments.isEmpty else { return }
         guard pending.count < 3 else { notice = "先等一条回复完成。"; return }
+        if state.chats[index].messages.isEmpty && state.chats[index].titleEdited != true && ["新对话", "新会话"].contains(state.chats[index].title) {
+            state.chats[index].title = clean.isEmpty ? "图片作业" : String(clean.prefix(22))
+        }
         let questions = parseQuestions(clean)
         if !questions.isEmpty { state.chats[index].questionQueue = questions; state.chats[index].questionIndex = 0 }
-        state.chats[index].messages.append(LearningMessage(role: questions.isEmpty ? "user" : "paper", text: clean)); state.chats[index].draft = ""; state.chats[index].waitingQuestion = false; save()
+        state.chats[index].messages.append(LearningMessage(role: questions.isEmpty || !attachments.isEmpty ? "user" : "paper", text: clean, images: attachments.isEmpty ? nil : attachments))
+        state.chats[index].draft = ""; state.chats[index].draftImages = []; state.chats[index].waitingQuestion = false; save()
         await startReply(id)
     }
     func retry() async { if let id = state.currentID { await startReply(id) } }
@@ -123,21 +153,82 @@ final class LearningStore: ObservableObject {
         requests[id]?.cancel(); state.chats.removeAll { $0.id == id }
         if state.currentID == id { state.currentID = state.chats.first?.id }
         if state.chats.isEmpty { newChat() }
-        save()
+        save(); collectImages()
     }
     func clearChats() {
-        requests.values.forEach { $0.cancel() }; requests.removeAll(); state.chats = []; newChat()
+        requests.values.forEach { $0.cancel() }; requests.removeAll(); state.chats = []; newChat(); collectImages()
     }
     var dataSize: String { ByteCountFormatter.string(fromByteCount: Int64((try? JSONEncoder().encode(state).count) ?? 0), countStyle: .file) }
-    func addFiles(_ urls: [URL], toCourse: Bool) {
-        if toCourse {
-            for url in urls {
-                let access = url.startAccessingSecurityScopedResource(); defer { if access { url.stopAccessingSecurityScopedResource() } }
-                let size = (try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize).map(Int64.init) ?? 0
-                state.files.append(CourseFile(name: url.lastPathComponent, course: state.selectedCourse, size: size))
-            }
-        } else { attach(names: urls.map(\.lastPathComponent), toCourse: false) }
-        save(); notice = "仅记录文件名，内容未读取。"
+    func addFiles(_ urls: [URL], to destination: AttachmentDestination) async {
+        guard !importing.contains(destination) else { return }
+        importing.insert(destination); defer { importing.remove(destination); collectImages() }
+        let repository = images
+        for url in urls {
+            do {
+                let isImage = UTType(filenameExtension: url.pathExtension)?.conforms(to: .image) == true
+                if case .course(let course) = destination, !isImage {
+                    guard course.isEmpty || state.courses.contains(course) else { continue }
+                    state.files.append(CourseFile(name: url.lastPathComponent, course: course)); save()
+                    continue
+                }
+                try checkImageLimit(destination)
+                let image = try await Task.detached(priority: .userInitiated) { try repository.importFile(url) }.value
+                try keepImage(image, at: destination)
+            } catch { notice = (error as? ImageImportError)?.errorDescription ?? "图片未添加，请重新选择。" }
+        }
+    }
+    func addPhotos(_ items: [PhotosPickerItem], to destination: AttachmentDestination) async {
+        guard !importing.contains(destination) else { return }
+        importing.insert(destination); defer { importing.remove(destination); collectImages() }
+        let repository = images
+        for item in items {
+            do {
+                try checkImageLimit(destination)
+                guard let data = try await item.loadTransferable(type: Data.self) else { throw ImageImportError.unreadable }
+                let image = try await Task.detached(priority: .userInitiated) { try repository.importData(data, name: "照片.jpg") }.value
+                try keepImage(image, at: destination)
+            } catch { notice = (error as? ImageImportError)?.errorDescription ?? "照片未添加，请检查网络后重试。" }
+        }
+    }
+    private func checkImageLimit(_ destination: AttachmentDestination) throws {
+        if case .chat(let id) = destination, let chat = state.chats.first(where: { $0.id == id }), (chat.draftImages ?? []).count >= 4 { throw ImageImportError.limit }
+    }
+    func keepImage(_ image: LearningImage, at destination: AttachmentDestination) throws {
+        switch destination {
+        case .chat(let id):
+            guard let index = state.chats.firstIndex(where: { $0.id == id }) else { collectImages(); return }
+            guard (state.chats[index].draftImages ?? []).count < 4 else { collectImages(); throw ImageImportError.limit }
+            state.chats[index].draftImages = (state.chats[index].draftImages ?? []) + [image]
+        case .course(let course):
+            guard course.isEmpty || state.courses.contains(course) else { collectImages(); return }
+            state.files.append(CourseFile(name: image.name, course: course, size: Int64(image.size), image: image))
+        }
+        save()
+    }
+    func removeDraftImage(_ image: LearningImage) {
+        guard let index = state.chats.firstIndex(where: { $0.id == state.currentID }) else { return }
+        state.chats[index].draftImages?.removeAll { $0.id == image.id }; save(); collectImages()
+    }
+    func removeFile(_ id: UUID) { state.files.removeAll { $0.id == id }; save(); collectImages() }
+    func useFileImage(_ file: CourseFile) {
+        guard let image = file.image else { return }
+        if current?.course != file.course {
+            if let chat = state.chats.first(where: { $0.course == file.course }) { select(chat) }
+            else { newChat(course: file.course) }
+        }
+        guard let id = state.currentID, current?.draftImages?.contains(where: { $0.id == image.id }) != true else { return }
+        do { try keepImage(image, at: .chat(id)) } catch { notice = error.localizedDescription }
+    }
+    func modelMessages(for chat: LearningChat) throws -> [ModelMessage] {
+        let all = chat.messages.filter { ["user", "teacher", "paper"].contains($0.role) }
+        var recent = Array(all.suffix(80))
+        if let paper = all.last(where: { $0.role == "paper" }), !recent.contains(where: { $0.id == paper.id }) { recent.insert(paper, at: 0) }
+        let included = Set(recent.filter { $0.role != "teacher" }.flatMap { $0.images ?? [] }.suffix(8).map(\.id))
+        return try recent.map { message in
+            let attachments = (message.images ?? []).filter { included.contains($0.id) && message.role != "teacher" }
+            let text = attachments.isEmpty && !(message.images ?? []).isEmpty ? message.text + "\n较早的作业图片已超出本次图片上下文，若需要查看该图，请让学生重新发送。" : message.text
+            return ModelMessage(role: message.role == "teacher" ? "assistant" : "user", text: text, imageURLs: try attachments.map { try images.encoded($0) })
+        }
     }
     func validateBackend(_ text: String) -> URL? {
         guard let url = URL(string: text.trimmingCharacters(in: .whitespacesAndNewlines)), let host = url.host, url.user == nil, url.password == nil, url.query == nil, url.fragment == nil else { return nil }
@@ -152,10 +243,7 @@ final class LearningStore: ObservableObject {
         state.chats[index].failure = nil; state.chats[index].replyInProgress = true; save()
         defer { pending.remove(id); if let index = state.chats.firstIndex(where: { $0.id == id }) { state.chats[index].replyInProgress = false }; save() }
         do {
-            let all = state.chats[index].messages.filter { ["user", "teacher", "paper"].contains($0.role) }
-            var recent = Array(all.suffix(80))
-            if let paper = all.last(where: { $0.role == "paper" }), !recent.contains(where: { $0.id == paper.id }) { recent.insert(paper, at: 0) }
-            let payload = recent.map { ModelMessage(role: $0.role == "teacher" ? "assistant" : "user", content: $0.text) }
+            let payload = try modelMessages(for: state.chats[index])
             let text: String
             if ModelConfiguration.mode == .direct {
                 let configuration = ModelConfiguration.load()
@@ -176,7 +264,7 @@ final class LearningStore: ObservableObject {
             if let target = state.chats.firstIndex(where: { $0.id == id }) { state.chats[target].messages.append(LearningMessage(role: "teacher", text: text)) }
         } catch {
             if let target = state.chats.firstIndex(where: { $0.id == id }) {
-                state.chats[target].failure = Task.isCancelled ? "已停止。" : ((error as? ModelConnectionError)?.errorDescription ?? (error as? ChatError)?.errorDescription ?? "连接失败，请重试。")
+                state.chats[target].failure = Task.isCancelled ? "已停止。" : ((error as? ModelConnectionError)?.errorDescription ?? (error as? ImageImportError)?.errorDescription ?? (error as? ChatError)?.errorDescription ?? "连接失败，请重试。")
             }
         }
     }

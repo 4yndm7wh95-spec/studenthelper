@@ -73,7 +73,38 @@ struct ModelKeychain {
     }
 }
 
-struct ModelMessage: Codable { let role: String; let content: String }
+struct ModelMessage: Codable {
+    let role: String
+    let content: ModelContent
+    init(role: String, content: String) { self.role = role; self.content = .text(content) }
+    init(role: String, text: String, imageURLs: [String]) {
+        self.role = role
+        self.content = imageURLs.isEmpty ? .text(text) : .parts(
+            [ModelContentPart(type: "text", text: text.isEmpty ? "请从图中的题目开始，一次只教一步。" : text)] +
+            imageURLs.map { ModelContentPart(type: "image_url", imageURL: .init(url: $0)) })
+    }
+}
+
+enum ModelContent: Codable {
+    case text(String), parts([ModelContentPart])
+    init(from decoder: Decoder) throws {
+        let container = try decoder.singleValueContainer()
+        if let text = try? container.decode(String.self) { self = .text(text) }
+        else { self = .parts(try container.decode([ModelContentPart].self)) }
+    }
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.singleValueContainer()
+        switch self { case .text(let text): try container.encode(text); case .parts(let parts): try container.encode(parts) }
+    }
+}
+
+struct ModelContentPart: Codable {
+    var type: String
+    var text: String?
+    var imageURL: ImageURL?
+    struct ImageURL: Codable { var url: String }
+    enum CodingKeys: String, CodingKey { case type, text; case imageURL = "image_url" }
+}
 
 enum ModelConnectionError: LocalizedError {
     case address, model, key, keychain(OSStatus), status(Int), response, empty
@@ -110,7 +141,8 @@ struct ModelClient {
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.setValue("Bearer " + cleanKey, forHTTPHeaderField: "Authorization")
-        var body: [String: Any] = ["model": model, "messages": messages.map { ["role": $0.role, "content": $0.content] }, "max_tokens": maxTokens, "stream": false]
+        let wireMessages = try JSONSerialization.jsonObject(with: JSONEncoder().encode(messages))
+        var body: [String: Any] = ["model": model, "messages": wireMessages, "max_tokens": maxTokens, "stream": false]
         if endpoint.host == "api.deepseek.com" { body["thinking"] = ["type": "disabled"] }
         request.httpBody = try JSONSerialization.data(withJSONObject: body)
         return request

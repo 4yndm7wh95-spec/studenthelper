@@ -7,6 +7,9 @@ struct SessionsView: View {
     @State private var newCourseOpen = false
     @State private var expanded = ""
     @State private var deleting: LearningChat?
+    @State private var deletingCourse: String?
+    @State private var renaming: LearningChat?
+    @State private var title = ""
     var body: some View {
         NavigationStack {
             VStack(spacing: 0) {
@@ -17,12 +20,21 @@ struct SessionsView: View {
                         if chats.isEmpty { Text("还没有聊天").foregroundStyle(Notebook.secondary) }
                         ForEach(chats) { row($0) }
                     } else {
+                        if store.state.courses.isEmpty {
+                            Button { newCourseOpen = true } label: { Label("新建课程", systemImage: "plus").frame(minHeight: 44) }
+                        }
                         ForEach(store.state.courses, id: \.self) { course in
                             DisclosureGroup(isExpanded: Binding(get: { expanded == course }, set: { expanded = $0 ? course : "" })) {
                                 let chats = store.state.chats.filter { $0.course == course }
                                 ForEach(chats) { row($0) }
                                 Button { store.state.selectedCourse = course; store.newChat(); dismiss() } label: { Label("新聊天", systemImage: "square.and.pencil").frame(minHeight: 44) }
-                            } label: { Label(course, systemImage: "book.closed").font(.body.weight(.medium)).foregroundStyle(Notebook.ink).frame(minHeight: 44) }
+                            } label: {
+                                HStack {
+                                    Label(course, systemImage: "book.closed").font(.body.weight(.medium)).foregroundStyle(Notebook.ink)
+                                    Spacer()
+                                    Menu { Button(role: .destructive) { deletingCourse = course } label: { Label("删除课程", systemImage: "trash") } } label: { Image(systemName: "ellipsis").frame(width: 44, height: 44) }.accessibilityLabel("管理课程：" + course)
+                                }.frame(minHeight: 44)
+                            }
                         }
                     }
                 }.scrollContentBackground(.hidden).listStyle(.insetGrouped)
@@ -33,11 +45,23 @@ struct SessionsView: View {
                 ToolbarItem(placement: .topBarTrailing) { Button { store.newChat(course: ordinary ? "" : expanded.isEmpty ? store.state.courses.first ?? "" : expanded); dismiss() } label: { Image(systemName: "square.and.pencil").frame(width: 44, height: 44) }.accessibilityLabel("新聊天") }
             }
             .onAppear { expanded = store.state.selectedCourse; ordinary = store.state.selectedCourse.isEmpty }
-            .sheet(isPresented: $newCourseOpen) { NewCourseView { expanded = $0 }.presentationDetents([.medium]).presentationDragIndicator(.visible).presentationCornerRadius(20) }
+            .sheet(isPresented: $newCourseOpen) { NewCourseView { expanded = $0; ordinary = false }.presentationDetents([.medium]).presentationDragIndicator(.visible).presentationCornerRadius(20) }
             .alert("删除这个聊天？", isPresented: Binding(get: { deleting != nil }, set: { if !$0 { deleting = nil } })) {
                 Button("取消", role: .cancel) { deleting = nil }
                 Button("删除", role: .destructive) { if let deleting { store.delete(deleting.id) }; deleting = nil }
             } message: { Text("这个聊天的消息和草稿会一起删除。") }
+            .alert("删除课程？", isPresented: Binding(get: { deletingCourse != nil }, set: { if !$0 { deletingCourse = nil } })) {
+                Button("取消", role: .cancel) { deletingCourse = nil }
+                Button("删除", role: .destructive) {
+                    if let name = deletingCourse { store.deleteCourse(name); if expanded == name { expanded = store.state.selectedCourse } }
+                    deletingCourse = nil
+                }
+            } message: { Text("“\(deletingCourse ?? "")”内的聊天和资料会一起删除。") }
+            .alert("会话名称", isPresented: Binding(get: { renaming != nil }, set: { if !$0 { renaming = nil } })) {
+                TextField("会话名称", text: $title)
+                Button("取消", role: .cancel) { renaming = nil }
+                Button("保存") { if let renaming { store.renameChat(renaming.id, to: title) }; renaming = nil }.disabled(title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+            }
         }
     }
     private func row(_ chat: LearningChat) -> some View {
@@ -52,6 +76,11 @@ struct SessionsView: View {
                 else if chat.id == store.state.currentID { Image(systemName: "checkmark").foregroundStyle(Notebook.accent) }
             }.frame(minHeight: 60)
         }.swipeActions { Button(role: .destructive) { deleting = chat } label: { Label("删除", systemImage: "trash") } }
+        .swipeActions(edge: .leading) { Button { title = chat.title; renaming = chat } label: { Label("重命名", systemImage: "pencil") }.tint(Notebook.accent) }
+        .contextMenu {
+            Button { title = chat.title; renaming = chat } label: { Label("重命名", systemImage: "pencil") }
+            Button(role: .destructive) { deleting = chat } label: { Label("删除", systemImage: "trash") }
+        }
     }
 }
 

@@ -72,7 +72,12 @@ struct MessageRow: View {
         } else {
             HStack(alignment: .top, spacing: 0) {
                 if message.role == "user" { Spacer(minLength: 32) }
-                MathMessageBody(text: message.text).padding(.horizontal, 14).padding(.vertical, 12)
+                VStack(alignment: .leading, spacing: 10) {
+                    ForEach(message.images ?? []) { image in
+                        ImagePreviewButton(image: image).frame(maxWidth: .infinity).frame(height: min(240, 260 * CGFloat(image.height) / CGFloat(max(image.width, 1))))
+                    }
+                    if !message.text.isEmpty { MathMessageBody(text: message.text) }
+                }.padding(.horizontal, 14).padding(.vertical, 12)
                     .frame(maxWidth: typeSize.isAccessibilitySize ? .infinity : message.role == "user" ? 300 : 318, alignment: .leading)
                     .background(message.role == "user" ? Notebook.soft : Notebook.side, in: RoundedRectangle(cornerRadius: 14))
                 if message.role != "user" { Spacer(minLength: 0) }
