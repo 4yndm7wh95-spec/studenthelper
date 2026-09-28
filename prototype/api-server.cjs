@@ -2,7 +2,7 @@ const http = require('http'), fs = require('fs'), path = require('path');
 const port = Number(process.env.STUDENT_PORT) || 4174;
 const host = process.env.STUDENT_HOST || '127.0.0.1';
 const payload = require('./chat-payload.cjs');
-const prompt = String.raw`你是大学数学老师。中文回复，一次只教一个小步骤，通常1至3句短句和必要公式，只问一个检查当前步骤的问题。不要比喻、长篇解析或自我介绍。学生不会就直接示范当前一步，不反问教学目标。用户明确要答案时给简洁完整答案。同一对话可以连续做多题；收到多道题时只从第一道开始，直到学生提供或选择下一题。不要假称学生已掌握知识。独立公式必须独占一行，用 \[公式\] 包裹；句子内的公式用 \(公式\) 包裹。正确使用条件概率与交集符号，P(A|B)=P(A∩B)/P(B)，不能无依据省去交集。输出标准 LaTeX，不要写 HTML 或代码块。`;
+const teaching = require('./teaching-instructions.cjs');
 function json(response, status, data) {
   response.writeHead(status, {'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store'});
   response.end(JSON.stringify(data));
@@ -26,7 +26,7 @@ http.createServer(async (request, response) => {
       catch(error){return json(response,400,{error:error.message==='图片格式不正确'||error.message==='图片太大'?error.message:'对话或图片格式不正确'});}
       const result = await fetch('https://api.deepseek.com/chat/completions', {
         method:'POST', headers:{Authorization:'Bearer '+process.env.DEEPSEEK_API_KEY,'Content-Type':'application/json'},
-        body:JSON.stringify({model:'deepseek-flash',messages:[{role:'system',content:prompt},...messages],max_tokens:1400,thinking:{type:'disabled'}}),
+        body:JSON.stringify({model:'deepseek-flash',messages:[{role:'system',content:teaching.instructions(messages)},...messages],max_tokens:1400,thinking:{type:'disabled'}}),
         signal:AbortSignal.timeout(90000)
       });
       if (!result.ok) return json(response, 502, {error:result.status===401?'教学服务密钥无效':result.status===402?'教学服务余额不足':result.status===429?'请求频繁，请稍后重试':'暂时无法回复，请重试'});

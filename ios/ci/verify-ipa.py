@@ -7,8 +7,8 @@ with zipfile.ZipFile(sys.argv[1]) as archive:
     info = plistlib.loads(archive.read(prefix + 'Info.plist'))
     assert info['CFBundleIdentifier'] == 'com.studenthelper.yibu'
     assert info['CFBundleSupportedPlatforms'] == ['iPhoneOS']
-    assert info['CFBundleShortVersionString'] == '0.4.0'
-    assert info['CFBundleVersion'] == '5'
+    assert info['CFBundleShortVersionString'] == '0.4.1'
+    assert info['CFBundleVersion'] == '6'
     assert float(info['MinimumOSVersion']) >= 17.0
     binary = archive.read(prefix + info['CFBundleExecutable'])
     assert binary[:4] in [b'\xcf\xfa\xed\xfe', b'\xca\xfe\xba\xbe', b'\xbe\xba\xfe\xca'], 'Missing Mach-O executable'

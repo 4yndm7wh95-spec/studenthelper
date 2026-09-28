@@ -1,0 +1,21 @@
+const fs=require('node:fs'),path=require('node:path');
+const dir=__dirname;
+(async()=>{
+ const [name,promptFile,inputFile,openingFile]=process.argv.slice(2);
+ if(!name||!promptFile||!inputFile)throw Error('session, prompt and student message files required');
+ const key=process.env.DEEPSEEK_API_KEY;
+ if(!key)throw Error('DEEPSEEK_API_KEY unavailable');
+ const file=path.join(dir,name+'.json');
+ const log=fs.existsSync(file)?JSON.parse(fs.readFileSync(file,'utf8')):{model:'deepseek-flash',prompt:fs.readFileSync(promptFile,'utf8'),turns:[]};
+ const input=fs.readFileSync(inputFile,'utf8').trim();
+ const guard=log.turns.length===0&&openingFile?fs.readFileSync(openingFile,'utf8'):'';
+ const messages=[{role:'system',content:log.prompt+(guard?'\n\n'+guard:'')},...log.turns.flatMap(t=>[{role:'user',content:t.student},{role:'assistant',content:t.reply}]),{role:'user',content:input}];
+ const start=Date.now();
+ const response=await fetch('https://api.deepseek.com/chat/completions',{method:'POST',headers:{Authorization:'Bearer '+key,'Content-Type':'application/json'},body:JSON.stringify({model:'deepseek-flash',messages,thinking:{type:'disabled'},max_tokens:1400,stream:false}),signal:AbortSignal.timeout(95000)});
+ if(!response.ok)throw Error('DeepSeek HTTP '+response.status);
+ const body=await response.json(),reply=body.choices?.[0]?.message?.content;
+ if(typeof reply!=='string')throw Error('No teaching reply');
+ log.turns.push({student:input,reply,openingRule:guard||undefined,returnedModel:body.model,finishReason:body.choices[0].finish_reason,usage:body.usage,elapsedMs:Date.now()-start,chars:reply.length});
+ fs.writeFileSync(file,JSON.stringify(log,null,2));
+ console.log(JSON.stringify({session:name,turn:log.turns.length,model:body.model,chars:reply.length,finishReason:body.choices[0].finish_reason,reply},null,2));
+})().catch(e=>{console.error(e.message);process.exitCode=1});

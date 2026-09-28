@@ -13,6 +13,14 @@ final class ModelConnectionTests: XCTestCase {
         }
     }
 
+    func testOpeningInstructionsOnlyApplyBeforeFirstTeacherReply() {
+        let first = ModelClient.instructions(for: [ModelMessage(role: "user", content: "零基础，带我做题")])
+        XCTAssertTrue(first.contains(TeachingInstructions.opening))
+        let continued = ModelClient.instructions(for: [ModelMessage(role: "user", content: "零基础"), ModelMessage(role: "assistant", content: "先看题目要做什么。"), ModelMessage(role: "user", content: "明白了")])
+        XCTAssertFalse(continued.contains(TeachingInstructions.opening))
+        XCTAssertTrue(continued.contains("先找学生这句话缺哪一环"))
+    }
+
     func testRejectsUnsafeAddressesAndInvalidKeys() {
         for address in ["http://api.deepseek.com", "https://user:password@example.com", "https://example.com?key=secret", "https://example.com#section", "not a URL"] {
             XCTAssertNil(ModelConfiguration(address: address).endpoint)

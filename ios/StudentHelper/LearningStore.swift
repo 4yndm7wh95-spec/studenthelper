@@ -249,7 +249,7 @@ final class LearningStore: ObservableObject {
                 let configuration = ModelConfiguration.load()
                 let key = try ModelKeychain().read(for: configuration)
                 text = try await ModelClient.complete(configuration: configuration, key: key,
-                    messages: [ModelMessage(role: "system", content: ModelClient.teachingPrompt)] + payload)
+                    messages: [ModelMessage(role: "system", content: ModelClient.instructions(for: payload))] + payload)
             } else {
                 guard let url = validateBackend(backend) else { throw ChatError.configuration }
                 var request = URLRequest(url: url.appendingPathComponent("api/chat"))
