@@ -52,7 +52,7 @@ struct ModelKeychain {
         var result: CFTypeRef?
         let status = SecItemCopyMatching(query as CFDictionary, &result)
         if status == errSecItemNotFound { return "" }
-        guard status == errSecSuccess, let data = result as? Data, let value = String(data: data, encoding: .utf8) else { throw ModelConnectionError.keychain }
+        guard status == errSecSuccess, let data = result as? Data, let value = String(data: data, encoding: .utf8) else { throw ModelConnectionError.keychain(status) }
         return value
     }
     func save(_ key: String, for configuration: ModelConfiguration) throws {
@@ -63,19 +63,20 @@ struct ModelKeychain {
         let status = SecItemUpdate(query as CFDictionary, attributes as CFDictionary)
         if status == errSecItemNotFound {
             var item = query; attributes.forEach { item[$0.key] = $0.value }
-            guard SecItemAdd(item as CFDictionary, nil) == errSecSuccess else { throw ModelConnectionError.keychain }
-        } else if status != errSecSuccess { throw ModelConnectionError.keychain }
+            let addStatus = SecItemAdd(item as CFDictionary, nil)
+            guard addStatus == errSecSuccess else { throw ModelConnectionError.keychain(addStatus) }
+        } else if status != errSecSuccess { throw ModelConnectionError.keychain(status) }
     }
     func remove(for configuration: ModelConfiguration) throws {
         let status = SecItemDelete(try query(for: configuration) as CFDictionary)
-        guard status == errSecSuccess || status == errSecItemNotFound else { throw ModelConnectionError.keychain }
+        guard status == errSecSuccess || status == errSecItemNotFound else { throw ModelConnectionError.keychain(status) }
     }
 }
 
 struct ModelMessage: Codable { let role: String; let content: String }
 
 enum ModelConnectionError: LocalizedError {
-    case address, model, key, keychain, status(Int), response, empty
+    case address, model, key, keychain(OSStatus), status(Int), response, empty
     var errorDescription: String? {
         switch self {
         case .address: return "接口地址需要以 https:// 开头。"

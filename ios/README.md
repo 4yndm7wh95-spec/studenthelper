@@ -14,6 +14,8 @@ SwiftUI，iOS 17+，主要尺寸 iPhone 16 Pro（402 × 874 pt）。按实际向
 
 密钥通过 Security Keychain 保存，采用 `WhenUnlockedThisDeviceOnly`，不进入 UserDefaults、聊天文件、导出数据、截图或构建产物。高级设置可以移除当前接口保存的密钥。接口地址和模型名称单独保存为偏好。
 
+云端模拟器测试对测试 App 临时作 ad hoc 签名并核验钥匙串访问权限；模拟器身份不会进入真机 IPA。真机需由侧载工具按用户自己的签名身份生成默认应用权限。依据 [Apple 钥匙串访问组说明](https://developer.apple.com/documentation/security/sharing-access-to-keychain-items-among-a-collection-of-apps)。
+
 ## 在 macOS / 后续 GitHub 构建
 
 工程规格为 `project.yml`。安装 XcodeGen 后，在 `ios` 目录生成 Xcode 工程：
