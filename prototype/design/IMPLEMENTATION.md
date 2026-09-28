@@ -15,6 +15,8 @@
 
 iOS 0.3.0 增加手机内的模型设置：默认直接调用 DeepSeek `deepseek-flash`，API Key 由用户填写并保存在钥匙串，IPA 不预置密钥。自定义接口、模型名称和自建服务放在折叠的高级设置。云构建加入接口格式、请求内容、错误处理、偏好保存与钥匙串隔离测试。
 
+网页版图片输入已接入真实内容：聊天粘贴、选择、拖入、预览、放大与单独发图；课程资料图片保存原图并可带入对话。IndexedDB 保存图片，JSON 导出/导入包含图片数据。真实 DeepSeek 视觉请求验证读取了测试图片中的算式，未使用用户的私人截图作外部测试。0.3.1 删除网页和原生示例入口与首次启动测试聊天，保留现有历史数据。
+
 验证原始依据：[KaTeX 渲染参数](https://katex.org/docs/options.html)、[Apple SwiftUI spring](https://developer.apple.com/documentation/SwiftUI/Animation/spring(response:dampingFraction:blendDuration:))、[Apple ATS](https://developer.apple.com/documentation/bundleresources/information-property-list/nsapptransportsecurity/nsallowslocalnetworking)。
 
 GitHub 私有仓库：`https://github.com/4yndm7wh95-spec/studenthelper`。第一次云构建已通过模拟器编译、iPhone16Pro 启动与截图、真机编译及 IPA 完整性验证。后续包以最新成功构建为准。IPA 未签名，需要侧载签名；尚未在用户实际 iPhone 上安装验证。

@@ -34,8 +34,7 @@ struct ChatView: View {
                     }.padding(16).animation(Notebook.message(reduced), value: chat.messages.count)
                 } else {
                     VStack(spacing: 12) {
-                        EmptyNotebook(symbol: "pencil.line", title: "一次只走一小步", subtitle: "把题目发来，我们一句一句来。")
-                        Button("打开题 24 示例") { store.loadExample() }.buttonStyle(NotebookButton(primary: false))
+                        EmptyNotebook(symbol: "pencil.line", title: "把题目发来")
                     }.frame(maxWidth: .infinity).padding(.top, 120)
                 }
             }

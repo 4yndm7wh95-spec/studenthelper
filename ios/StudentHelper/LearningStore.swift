@@ -21,8 +21,8 @@ final class LearningStore: ObservableObject {
             state = saved
         } else {
             var initial = LearningState()
-            let example = Example.chat()
-            initial.chats = [example]; initial.currentID = example.id
+            let chat = LearningChat(title: "新对话", course: initial.selectedCourse)
+            initial.chats = [chat]; initial.currentID = chat.id
             state = initial
         }
         if !state.chats.contains(where: { $0.id == state.currentID }) { state.currentID = state.chats.first?.id }
@@ -61,7 +61,6 @@ final class LearningStore: ObservableObject {
         }
         save()
     }
-    func loadExample() { let chat = Example.chat(); state.chats.insert(chat, at: 0); select(chat) }
     func send(_ text: String) async {
         let clean = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !clean.isEmpty, let id = state.currentID, !pending.contains(id), let index = state.chats.firstIndex(where: { $0.id == id }) else { return }
