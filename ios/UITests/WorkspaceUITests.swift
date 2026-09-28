@@ -33,7 +33,11 @@ final class WorkspaceUITests: XCTestCase {
     }
     func testSystemPhotoPickerPreparesAndSendsActualImage() {
         let app = app()
-        app.buttons["添加图片"].tap(); app.buttons["从相册选择"].tap()
+        let attach = app.buttons["添加图片"]
+        XCTAssertTrue(attach.waitForExistence(timeout: 5))
+        let center = attach.frame
+        app.coordinate(withNormalizedOffset: CGVector(dx: 0, dy: 0)).withOffset(CGVector(dx: center.midX, dy: center.midY)).tap()
+        app.buttons["从相册选择"].tap()
         let media = app.descendants(matching: .any).matching(NSPredicate(format: "label BEGINSWITH[c] 'Photo,' OR label BEGINSWITH[c] 'Photo ' OR label BEGINSWITH '照片' OR label BEGINSWITH[c] 'Screenshot' OR label BEGINSWITH '屏幕快照'")).firstMatch
         guard media.waitForExistence(timeout: 12) else {
             let screenshot = XCTAttachment(screenshot: app.screenshot()); screenshot.name = "PhotoPicker"; screenshot.lifetime = .keepAlways; add(screenshot)
