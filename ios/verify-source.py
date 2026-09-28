@@ -35,6 +35,8 @@ with (root / 'StudentHelper' / 'Info.plist').open('rb') as file:
     info = plistlib.load(file)
 assert info['NSAppTransportSecurity']['NSAllowsLocalNetworking'] is True
 assert 'NSAllowsArbitraryLoads' not in info['NSAppTransportSecurity']
+assert info['CFBundleShortVersionString'] == project['settings']['base']['MARKETING_VERSION']
+assert info['CFBundleVersion'] == project['settings']['base']['CURRENT_PROJECT_VERSION']
 assets = root / 'StudentHelper' / 'Assets.xcassets' / 'AppIcon.appiconset'
 manifest = json.loads((assets / 'Contents.json').read_text())
 for item in manifest['images']:
