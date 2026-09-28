@@ -1,0 +1,74 @@
+name: Build iOS IPA
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths: ["ios/**", ".github/workflows/ios-ipa.yml"]
+permissions:
+  contents: read
+concurrency:
+  group: ios-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  build:
+    runs-on: macos-15
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - name: Select Xcode
+        run: |
+          sudo xcode-select --switch /Applications/Xcode_16.4.app/Contents/Developer
+          xcodebuild -version
+      - name: Generate project
+        working-directory: ios
+        run: |
+          if ! command -v xcodegen >/dev/null; then brew install xcodegen; fi
+          xcodegen generate
+      - name: Compile for simulator
+        working-directory: ios
+        run: |
+          set -o pipefail
+          xcodebuild -project StudentHelper.xcodeproj -scheme StudentHelper \
+            -configuration Debug -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' \
+            -derivedDataPath build/simulator CODE_SIGNING_ALLOWED=NO build | tee simulator-build.log
+      - name: Launch iPhone simulator and capture
+        working-directory: ios
+        run: bash ci/capture-simulator.sh
+      - name: Compile for physical iPhone
+        working-directory: ios
+        run: |
+          set -o pipefail
+          xcodebuild -project StudentHelper.xcodeproj -scheme StudentHelper \
+            -configuration Release -sdk iphoneos -destination 'generic/platform=iOS' \
+            -derivedDataPath build/device CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY='' \
+            build | tee device-build.log
+      - name: Package IPA
+        working-directory: ios
+        run: |
+          mkdir -p build/Payload
+          cp -R build/device/Build/Products/Release-iphoneos/StudentHelper.app build/Payload/
+          (cd build && /usr/bin/zip -qry StudentHelper-unsigned.ipa Payload)
+          python3 ci/verify-ipa.py build/StudentHelper-unsigned.ipa
+          shasum -a 256 build/StudentHelper-unsigned.ipa > build/SHA256.txt
+          printf 'Commit: %s\nSigning: unsigned; requires sideload signing\n' "$GITHUB_SHA" > build/BUILD-INFO.txt
+          xcodebuild -version >> build/BUILD-INFO.txt
+          printf '## IPA ready\n\nUnsigned physical iPhone IPA. Sign with your sideloading tool before installation.\n' >> "$GITHUB_STEP_SUMMARY"
+      - name: Upload IPA and preview
+        uses: actions/upload-artifact@v4
+        with:
+          name: StudentHelper-iPhone-unsigned
+          path: |
+            ios/build/StudentHelper-unsigned.ipa
+            ios/build/SHA256.txt
+            ios/build/BUILD-INFO.txt
+            ios/build/iphone16pro.png
+          if-no-files-found: error
+          retention-days: 14
+      - name: Upload failure logs
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-diagnostics
+          path: ios/*-build.log
+          if-no-files-found: ignore
+          retention-days: 7

@@ -1,0 +1,13 @@
+.validation/
+.cloud/
+deliverables/
+**/build/
+**/*.xcodeproj/
+**/*.xcworkspace/
+**/*-build.log
+**/.DS_Store
+**/.env*
+**/*.p12
+**/*.mobileprovision
+**/node_modules/
+**/__pycache__/
