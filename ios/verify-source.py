@@ -37,6 +37,8 @@ assert info['NSAppTransportSecurity']['NSAllowsLocalNetworking'] is True
 assert 'NSAllowsArbitraryLoads' not in info['NSAppTransportSecurity']
 assert info['CFBundleShortVersionString'] == project['settings']['base']['MARKETING_VERSION']
 assert info['CFBundleVersion'] == project['settings']['base']['CURRENT_PROJECT_VERSION']
+assert info['CFBundleShortVersionString'] == project['targets']['StudentHelper']['info']['properties']['CFBundleShortVersionString']
+assert info['CFBundleVersion'] == project['targets']['StudentHelper']['info']['properties']['CFBundleVersion']
 assets = root / 'StudentHelper' / 'Assets.xcassets' / 'AppIcon.appiconset'
 manifest = json.loads((assets / 'Contents.json').read_text())
 for item in manifest['images']:

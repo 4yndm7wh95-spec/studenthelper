@@ -23,6 +23,8 @@ targets:
       path: StudentHelper/Info.plist
       properties:
         CFBundleDisplayName: 一步
+        CFBundleShortVersionString: "0.4.0"
+        CFBundleVersion: "5"
         UILaunchScreen: {}
         UISupportedInterfaceOrientations:
           - UIInterfaceOrientationPortrait
