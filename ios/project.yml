@@ -41,6 +41,8 @@ targets:
       base:
         GENERATE_INFOPLIST_FILE: NO
         CODE_SIGN_STYLE: Automatic
+        MARKETING_VERSION: "0.4.0"
+        CURRENT_PROJECT_VERSION: "5"
     scheme:
       testTargets:
         - StudentHelperTests

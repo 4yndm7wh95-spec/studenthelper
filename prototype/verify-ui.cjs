@@ -17,7 +17,8 @@ async function run() {
     await page.waitForTimeout(350);
     assert.equal(await page.locator('[data-action="sample"]').count(),0);
     assert.equal(await page.locator('.yb-teacher').count(),0);
-    await page.evaluate(()=>{StudentStore.current().messages=[{role:'user',text:'先做第 24 题。'},{role:'paper',text:StudentStore.question},{role:'teacher',text:'先看目标：P(A | B) = P(A)'}];StudentStore.persist()});
+    assert.deepEqual(await page.evaluate(()=>StudentStore.state.courses),[]);
+    await page.evaluate(()=>{StudentStore.addCourse('数学');StudentStore.current().course='数学';StudentStore.current().messages=[{role:'user',text:'先做第 24 题。'},{role:'paper',text:StudentStore.question},{role:'teacher',text:'先看目标：P(A | B) = P(A)'}];StudentStore.persist()});
     await page.reload();
     assert.equal(await page.locator('.yb-session.selected').count(),1,'current course expands');
     assert.equal(await page.locator('.yb-teacher').count(),1);
@@ -110,7 +111,7 @@ async function run() {
     await phone.locator('#create-course').click();
     await phone.waitForTimeout(200);
     assert.equal(await phone.locator('#sidebar').evaluate(e=>e.classList.contains('open')),false);
-    await phone.evaluate(()=>{StudentStore.create('概率论与数理统计');StudentStore.current().messages=[{role:'paper',text:StudentStore.question},{role:'teacher',text:'先看目标：P(A | B) = P(A)'}];StudentStore.persist('messages')});
+    await phone.evaluate(()=>{StudentStore.addCourse('数学');StudentStore.create('数学');StudentStore.current().messages=[{role:'paper',text:StudentStore.question},{role:'teacher',text:'先看目标：P(A | B) = P(A)'}];StudentStore.persist('messages')});
     await phone.waitForTimeout(200);
     await phone.screenshot({path:'prototype/screenshots/opus-mobile.png',fullPage:true});
     assert.equal(await phone.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);
