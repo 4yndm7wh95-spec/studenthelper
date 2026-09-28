@@ -17,7 +17,11 @@ struct LearningChat: Identifiable, Codable {
     var reviewDraft = ""
     var reviewStatus: String?
     var replyInProgress = false
+    var questionQueue: [QueuedProblem]?
+    var questionIndex: Int?
 }
+
+struct QueuedProblem: Codable { var number: Int; var text: String }
 
 struct CourseFile: Identifiable, Codable {
     var id = UUID()

@@ -67,7 +67,9 @@ final class LearningStore: ObservableObject {
         guard !clean.isEmpty, let id = state.currentID, !pending.contains(id), let index = state.chats.firstIndex(where: { $0.id == id }) else { return }
         if state.chats[index].messages.isEmpty { state.chats[index].title = String(clean.prefix(22)) }
         guard pending.count < 3 else { notice = "先等一条回复完成。"; return }
-        state.chats[index].messages.append(LearningMessage(role: state.chats[index].waitingQuestion ? "paper" : "user", text: clean)); state.chats[index].draft = ""; state.chats[index].waitingQuestion = false; save()
+        let questions = parseQuestions(clean)
+        if !questions.isEmpty { state.chats[index].questionQueue = questions; state.chats[index].questionIndex = 0 }
+        state.chats[index].messages.append(LearningMessage(role: questions.isEmpty ? "user" : "paper", text: clean)); state.chats[index].draft = ""; state.chats[index].waitingQuestion = false; save()
         await startReply(id)
     }
     func retry() async { if let id = state.currentID { await startReply(id) } }
@@ -80,12 +82,31 @@ final class LearningStore: ObservableObject {
         requests[id] = nil
     }
     func stop() { if let id = state.currentID { requests[id]?.cancel() } }
-    func nextQuestion() {
-        guard let index = state.chats.firstIndex(where: { $0.id == state.currentID }), !pending.contains(state.chats[index].id) else { return }
-        let count = state.chats[index].messages.filter { $0.role == "divider" }.count
-        let number = state.chats[index].messages.contains { $0.text == Example.question } ? 25 + count : 2 + count
-        state.chats[index].messages.append(LearningMessage(role: "divider", text: "第\(number)题"))
-        state.chats[index].waitingQuestion = true; save()
+    var canNext: Bool {
+        guard let chat = current, let queue = chat.questionQueue else { return false }
+        return queue.count > 1 && (chat.questionIndex ?? 0) < queue.count - 1
+    }
+    func nextQuestion() async {
+        guard canNext, let index = state.chats.firstIndex(where: { $0.id == state.currentID }), !pending.contains(state.chats[index].id), let queue = state.chats[index].questionQueue else { return }
+        let next = (state.chats[index].questionIndex ?? 0) + 1, id = state.chats[index].id
+        state.chats[index].questionIndex = next
+        state.chats[index].messages.append(LearningMessage(role: "divider", text: "第\(queue[next].number)题"))
+        state.chats[index].messages.append(LearningMessage(role: "paper", text: queue[next].text))
+        state.chats[index].waitingQuestion = false; save()
+        await startReply(id)
+    }
+    private func parseQuestions(_ text: String) -> [QueuedProblem] {
+        let source = text as NSString
+        guard let regex = try? NSRegularExpression(pattern: #"^\s*(?:第\s*(\d+)\s*题\s*[：:、.．]?|(\d{1,3})[.．、)）])\s*"#, options: .anchorsMatchLines) else { return [] }
+        let matches = regex.matches(in: text, range: NSRange(location: 0, length: source.length))
+        guard matches.count > 1 else { return [] }
+        let questions = matches.enumerated().map { index, match -> QueuedProblem in
+            let numberRange = match.range(at: 1).location != NSNotFound ? match.range(at: 1) : match.range(at: 2)
+            let start = match.range.location + match.range.length
+            let end = index + 1 < matches.count ? matches[index + 1].range.location : source.length
+            return QueuedProblem(number: Int(source.substring(with: numberRange)) ?? 0, text: source.substring(with: NSRange(location: start, length: end - start)).trimmingCharacters(in: .whitespacesAndNewlines))
+        }
+        return questions.allSatisfy { question in question.text.count >= 8 && ["求", "证明", "计算", "设", "若", "已知", "试", "判断", "解", "积分", "极限"].contains { question.text.contains($0) } } ? questions : []
     }
     func record(for course: String? = nil) -> LearningChat? {
         state.chats.first { $0.course == (course ?? state.selectedCourse) && $0.messages.contains { $0.role == "paper" && $0.text == Example.question } }

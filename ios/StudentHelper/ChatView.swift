@@ -67,7 +67,7 @@ struct ChatView: View {
         VStack(spacing: 8) {
             if !(store.current?.messages.isEmpty ?? true) {
                 HStack(spacing: 8) {
-                    Button { store.nextQuestion(); inputFocused = true } label: { Label("换下一题", systemImage: "plus.square") }
+                    if store.canNext { Button { Task { await store.nextQuestion() } } label: { Label("下一题", systemImage: "plus.square") } }
                     Button { Task { await store.send("我没懂这一步，请只示范当前这一步。") } } label: { Label("我没懂", systemImage: "questionmark.bubble") }
                     Menu { Button { Task { await store.send("请给这道题的简洁完整答案。") } } label: { Label("看完整答案", systemImage: "eye") } } label: { Image(systemName: "ellipsis").frame(width: 44) }.accessibilityLabel("更多解题方式")
                 }.font(.caption).buttonStyle(.bordered).tint(Notebook.secondary).frame(minHeight: 44).disabled(pending)

@@ -67,12 +67,12 @@ struct MessageRow: View {
         } else if message.role == "paper" {
             VStack(alignment: .leading, spacing: 8) {
                 Text("题目").font(.caption).foregroundStyle(Notebook.secondary)
-                Text(message.text).reading().textSelection(.enabled)
+                MathMessageBody(text: message.text, cards: false)
             }.frame(maxWidth: .infinity, alignment: .leading).padding(16).background(Notebook.side, in: RoundedRectangle(cornerRadius: 14)).overlay(RoundedRectangle(cornerRadius: 14).stroke(Notebook.line, lineWidth: 1))
         } else {
             HStack(alignment: .top, spacing: 0) {
                 if message.role == "user" { Spacer(minLength: 32) }
-                Text(message.text).reading().textSelection(.enabled).padding(.horizontal, 14).padding(.vertical, 12)
+                MathMessageBody(text: message.text).padding(.horizontal, 14).padding(.vertical, 12)
                     .frame(maxWidth: typeSize.isAccessibilitySize ? .infinity : message.role == "user" ? 300 : 318, alignment: .leading)
                     .background(message.role == "user" ? Notebook.soft : Notebook.side, in: RoundedRectangle(cornerRadius: 14))
                 if message.role != "user" { Spacer(minLength: 0) }
