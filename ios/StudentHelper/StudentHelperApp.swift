@@ -15,6 +15,9 @@ struct WorkspaceView: View {
     @Environment(\.accessibilityReduceMotion) private var reduced
     @Environment(\.scenePhase) private var scenePhase
     @State private var tab: WorkspaceTab = .chat
+    #if DEBUG
+    @State private var modelSettingsPreview = ProcessInfo.processInfo.arguments.contains("--model-settings-preview")
+    #endif
     var body: some View {
         TabView(selection: $tab) {
             NavigationStack { ChatView() }.tabItem { Label("聊天", systemImage: "bubble.left.and.text.bubble.right") }.tag(WorkspaceTab.chat)
@@ -36,5 +39,8 @@ struct WorkspaceView: View {
         }
         .onChange(of: scenePhase) { _, phase in if phase != .active { store.save() } }
         .alert("无法保存", isPresented: Binding(get: { store.storageError != nil }, set: { if !$0 { store.storageError = nil } })) { Button("知道了", role: .cancel) { store.storageError = nil } } message: { Text(store.storageError ?? "") }
+        #if DEBUG
+        .fullScreenCover(isPresented: $modelSettingsPreview) { NavigationStack { SettingsView() }.environmentObject(store) }
+        #endif
     }
 }

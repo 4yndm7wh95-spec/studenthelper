@@ -31,7 +31,7 @@ jobs:
           xcodebuild -project StudentHelper.xcodeproj -scheme StudentHelper \
             -configuration Debug -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' \
             -derivedDataPath build/simulator CODE_SIGNING_ALLOWED=NO build | tee simulator-build.log
-      - name: Launch iPhone simulator and capture
+      - name: Test model connection and capture iPhone simulator
         working-directory: ios
         run: bash ci/capture-simulator.sh
       - name: Compile for physical iPhone
@@ -62,6 +62,8 @@ jobs:
             ios/build/SHA256.txt
             ios/build/BUILD-INFO.txt
             ios/build/iphone16pro.png
+            ios/build/iphone-model-settings.png
+            ios/model-tests.log
           if-no-files-found: error
           retention-days: 14
       - name: Upload failure logs
@@ -69,6 +71,8 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: build-diagnostics
-          path: ios/*-build.log
+          path: |
+            ios/*-build.log
+            ios/model-tests.log
           if-no-files-found: ignore
           retention-days: 7

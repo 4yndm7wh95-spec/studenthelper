@@ -13,7 +13,7 @@ from PIL import Image
 
 parser = Parser(Language(tree_sitter_swift.language()))
 failed = False
-for source in sorted((root / 'StudentHelper').glob('*.swift')):
+for source in sorted(list((root / 'StudentHelper').glob('*.swift')) + list((root / 'Tests').glob('*.swift'))):
     tree = parser.parse(source.read_bytes())
     errors = []
     def visit(node):

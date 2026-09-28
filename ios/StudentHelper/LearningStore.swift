@@ -153,27 +153,38 @@ final class LearningStore: ObservableObject {
         state.chats[index].failure = nil; state.chats[index].replyInProgress = true; save()
         defer { pending.remove(id); if let index = state.chats.firstIndex(where: { $0.id == id }) { state.chats[index].replyInProgress = false }; save() }
         do {
-            guard let url = validateBackend(backend) else { throw ChatError.configuration }
             let all = state.chats[index].messages.filter { ["user", "teacher", "paper"].contains($0.role) }
             var recent = Array(all.suffix(80))
             if let paper = all.last(where: { $0.role == "paper" }), !recent.contains(where: { $0.id == paper.id }) { recent.insert(paper, at: 0) }
-            let payload = recent.map { ["role": $0.role == "teacher" ? "assistant" : "user", "content": $0.text] }
-            var request = URLRequest(url: url.appendingPathComponent("api/chat"))
-            request.httpMethod = "POST"; request.timeoutInterval = 95; request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-            request.httpBody = try JSONSerialization.data(withJSONObject: ["messages": payload])
-            let (data, response) = try await URLSession.shared.data(for: request)
-            let result = try JSONDecoder().decode(ChatReply.self, from: data)
-            guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode), let text = result.reply, !text.isEmpty else { throw ChatError.server(result.error ?? "暂时无法回复，请重试") }
+            let payload = recent.map { ModelMessage(role: $0.role == "teacher" ? "assistant" : "user", content: $0.text) }
+            let text: String
+            if ModelConfiguration.mode == .direct {
+                let configuration = ModelConfiguration.load()
+                let key = try ModelKeychain().read(for: configuration)
+                text = try await ModelClient.complete(configuration: configuration, key: key,
+                    messages: [ModelMessage(role: "system", content: ModelClient.teachingPrompt)] + payload)
+            } else {
+                guard let url = validateBackend(backend) else { throw ChatError.configuration }
+                var request = URLRequest(url: url.appendingPathComponent("api/chat"))
+                request.httpMethod = "POST"; request.timeoutInterval = 95; request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+                request.httpBody = try JSONEncoder().encode(ServiceRequest(messages: payload))
+                let (data, response) = try await URLSession.shared.data(for: request)
+                let result = try JSONDecoder().decode(ChatReply.self, from: data)
+                guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode), let reply = result.reply, !reply.isEmpty else { throw ChatError.server("暂时无法回复，请重试。") }
+                text = reply
+            }
+            try Task.checkCancellation()
             if let target = state.chats.firstIndex(where: { $0.id == id }) { state.chats[target].messages.append(LearningMessage(role: "teacher", text: text)) }
         } catch {
             if let target = state.chats.firstIndex(where: { $0.id == id }) {
-                state.chats[target].failure = Task.isCancelled ? "已停止。" : (error as? ChatError)?.errorDescription ?? "连接失败，请重试。"
+                state.chats[target].failure = Task.isCancelled ? "已停止。" : ((error as? ModelConnectionError)?.errorDescription ?? (error as? ChatError)?.errorDescription ?? "连接失败，请重试。")
             }
         }
     }
 }
 
 private struct ChatReply: Decodable { let reply: String?; let error: String? }
+private struct ServiceRequest: Encodable { let messages: [ModelMessage] }
 private enum ChatError: LocalizedError {
     case configuration, server(String)
     var errorDescription: String? {
