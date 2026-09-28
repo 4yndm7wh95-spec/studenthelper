@@ -14,7 +14,7 @@ SwiftUI，iOS 17+，主要尺寸 iPhone 16 Pro（402 × 874 pt）。按实际向
 
 密钥通过 Security Keychain 保存，采用 `WhenUnlockedThisDeviceOnly`，不进入 UserDefaults、聊天文件、导出数据、截图或构建产物。高级设置可以移除当前接口保存的密钥。接口地址和模型名称单独保存为偏好。
 
-云端模拟器测试对测试 App 临时作 ad hoc 签名并核验钥匙串访问权限；模拟器身份不会进入真机 IPA。真机需由侧载工具按用户自己的签名身份生成默认应用权限。依据 [Apple 钥匙串访问组说明](https://developer.apple.com/documentation/security/sharing-access-to-keychain-items-among-a-collection-of-apps)。
+云端模拟器测试使用 Xcode 自动生成的 ad hoc 签名和模拟权限，并通过实际钥匙串读写测试核验。模拟器配置不会进入真机 IPA。真机需由侧载工具按用户自己的签名身份生成默认应用权限。依据 [Apple 钥匙串访问组说明](https://developer.apple.com/documentation/security/sharing-access-to-keychain-items-among-a-collection-of-apps)。
 
 ## 在 macOS / 后续 GitHub 构建
 
@@ -22,7 +22,7 @@ SwiftUI，iOS 17+，主要尺寸 iPhone 16 Pro（402 × 874 pt）。按实际向
 
 ```sh
 xcodegen generate
-xcodebuild -project StudentHelper.xcodeproj -scheme StudentHelper -sdk iphonesimulator -configuration Debug CODE_SIGNING_ALLOWED=NO build
+xcodebuild -project StudentHelper.xcodeproj -scheme StudentHelper -sdk iphonesimulator -configuration Debug CODE_SIGNING_ALLOWED=YES CODE_SIGN_IDENTITY=- build
 ```
 
 旧的自建服务路径保留在“高级设置 → 连接方式 → 自己的服务”。此模式填写 HTTPS 服务，或同一网络的 `http://192.168.x.x:4174` / `.local` 地址，不能填写手机自身的 127.0.0.1。这个模式的连接检查通过 `/api/health`。

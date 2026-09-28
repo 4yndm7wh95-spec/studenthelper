@@ -30,7 +30,7 @@ jobs:
           set -o pipefail
           xcodebuild -project StudentHelper.xcodeproj -scheme StudentHelper \
             -configuration Debug -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' \
-            -derivedDataPath build/simulator CODE_SIGNING_ALLOWED=NO build | tee simulator-build.log
+            -derivedDataPath build/simulator CODE_SIGNING_ALLOWED=YES CODE_SIGN_IDENTITY=- build | tee simulator-build.log
       - name: Test model connection and capture iPhone simulator
         working-directory: ios
         run: bash ci/capture-simulator.sh
