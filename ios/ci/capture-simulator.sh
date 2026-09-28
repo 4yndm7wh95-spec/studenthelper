@@ -34,7 +34,7 @@ PY
 APP=build/simulator/Build/Products/Debug-iphonesimulator/StudentHelper.app
 codesign --force --sign - --entitlements build/simulator-keychain.plist "$APP"
 codesign --verify "$APP"
-codesign --display --entitlements - "$APP" > build/simulator-entitlements.plist
+codesign --display --entitlements - --xml "$APP" > build/simulator-entitlements.plist
 python3 - <<'PY'
 import plistlib
 entitlements = plistlib.load(open('build/simulator-entitlements.plist', 'rb'))
