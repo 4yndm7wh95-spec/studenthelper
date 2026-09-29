@@ -69,7 +69,7 @@ struct ChatView: View {
                 Button { newTitle = store.current?.title ?? ""; renaming = true } label: {
                     HStack(spacing: 6) { Text(store.current?.title ?? "新对话").font(.system(size: 17, weight: .semibold)).lineLimit(1); Image(systemName: "pencil").font(.system(size: 12, weight: .medium)).foregroundStyle(Notebook.tertiary) }
                         .foregroundStyle(Notebook.ink).frame(minHeight: 44)
-                }.accessibilityLabel("修改会话名称：" + (store.current?.title ?? "新对话"))
+                }.accessibilityLabel("修改会话名称").accessibilityValue(store.current?.title ?? "新对话")
             }
             ToolbarItem(placement: .topBarTrailing) { NavigationLink { SettingsView() } label: { Image(systemName: "gearshape").frame(width: 44, height: 44) }.accessibilityLabel("设置") }
         }
