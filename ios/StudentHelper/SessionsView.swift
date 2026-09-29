@@ -84,6 +84,10 @@ struct SessionsView: View {
         .listRowBackground(chat.id == store.state.currentID ? Notebook.soft : Notebook.surface)
         .swipeActions { Button(role: .destructive) { deleting = chat } label: { Label("删除", systemImage: "trash") } }
         .swipeActions(edge: .leading) { Button { title = chat.title; renaming = chat } label: { Label("重命名", systemImage: "pencil") }.tint(Notebook.accent) }
+        .contextMenu {
+            Button { title = chat.title; renaming = chat } label: { Label("重命名", systemImage: "pencil") }
+            Button(role: .destructive) { deleting = chat } label: { Label("删除", systemImage: "trash") }
+        }
     }
 }
 

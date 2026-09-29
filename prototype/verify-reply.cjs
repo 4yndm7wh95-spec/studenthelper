@@ -15,6 +15,9 @@ let pw;try{pw=require('playwright')}catch{pw=require('C:/Users/kkk/.cache/codex-
   assert.equal(await page.evaluate(()=>StudentMath.delayFor('一二三四五六七八九十一二三四五六七八九十')),10000);
   await page.waitForTimeout(9000);assert.equal(await page.locator('.yb-reply-part:visible').count(),1);
   await page.waitForTimeout(1300);assert.equal(await page.locator('.yb-reply-part:visible').count(),2);
+  assert.equal(await page.locator('.yb-send').getAttribute('aria-label'),'跳过等待');
+  await page.locator('.yb-send').click();assert.equal(await page.locator('.yb-reply-part:visible').count(),3);
+  await page.locator('.yb-reply-wait').waitFor({state:'detached'});
   await page.reload();await page.waitForSelector('.yb-reply-part');
   assert.equal(await page.locator('.yb-reply-wait').count(),0);
   assert.equal(await page.locator('.yb-reply-part:visible').count(),3);
