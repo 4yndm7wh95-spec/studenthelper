@@ -1,0 +1,64 @@
+/* 一步 · reply-style.css（整份替换 web/reply-style.css 与 ios/WebMath/reply-style.css，两处内容一致）
+ * 老师回复 = 若干 .yb-reply-part；每个 part 内一个 .yb-bubble，角色由 is-lead / is-explain / is-ask / is-formula 决定。
+ * 变量在网页里来自 workspace.css；在 iOS WebMath 里由 index.html 的 :root 提供同名变量（见 ios/WebMath/index.html）。
+ */
+.yb-teacher{align-self:flex-start;width:100%;max-width:var(--bubble-max,520px);padding:0;white-space:normal}
+.yb-reply-parts{display:flex;flex-direction:column;align-items:flex-start;white-space:normal}
+
+/* 每个 part 是“出现动画”的外壳：用 grid 行高 0fr→1fr 让下方内容被平滑推开，不跳。 */
+.yb-reply-part{display:grid;grid-template-rows:1fr;width:100%}
+.yb-reply-part[hidden]{display:none!important}
+.yb-reply-wrap{min-height:0;min-width:0}
+.yb-reply-part+.yb-reply-part>.yb-reply-wrap>.yb-bubble{margin-top:8px}          /* 同一回复内气泡间距 8px（放在外壳内，随外壳一起展开） */
+.yb-reply-part[data-state=enter]{grid-template-rows:0fr;opacity:0;transform:translateY(8px)}
+.yb-reply-part[data-state=in]{grid-template-rows:1fr;opacity:1;transform:none;transition:grid-template-rows 420ms var(--ease-out,cubic-bezier(.22,1,.36,1)),opacity 420ms var(--ease-out,cubic-bezier(.22,1,.36,1)),transform 420ms var(--ease-out,cubic-bezier(.22,1,.36,1))}
+.yb-reply-part[data-state=fade]{opacity:0}
+.yb-reply-part[data-state=fade-in]{opacity:1;transition:opacity 200ms linear}
+.yb-reply-part[data-state=enter]>.yb-reply-wrap,.yb-reply-part[data-state=in]>.yb-reply-wrap{overflow:hidden}
+
+/* 气泡通用 */
+.yb-bubble{box-sizing:border-box;display:block;width:fit-content;max-width:100%;min-height:44px;padding:10px 14px;border-radius:var(--r-bubble,18px) var(--r-bubble,18px) var(--r-bubble,18px) var(--r-tail,6px);background:var(--surface,#fff);border:1px solid var(--line,#E9DFC9);color:var(--ink,#221D14);font:400 1em/1.625 var(--font-ui,inherit);letter-spacing:.02em;overflow-wrap:break-word;white-space:pre-wrap;text-align:left}
+.yb-bubble .yb-inline-math{white-space:normal}
+
+/* 角色 1：说明（默认） */
+.yb-bubble.is-explain{}
+
+/* 角色 2：重点。只有模型自己加了 **粗体** 且它在回复的首个文字气泡里才会出现；每条回复最多一个 */
+.yb-bubble.is-lead{padding:11px 16px;background:var(--marker,#FFEFB0);border-color:var(--marker-edge,#F2DA7E);color:var(--marker-ink,#2B2200);font-size:1.0625em;line-height:1.65;font-weight:600}
+.yb-bubble.is-lead strong{font-weight:700;background:none}
+
+/* 角色 3：提问。只有回复的最后一个气泡以问号结尾才会出现；每条回复最多一个 */
+.yb-bubble.is-ask{padding:9.5px 13.5px;border:1.5px solid var(--accent,#1D6B55);font-weight:500}
+
+/* 角色 4：公式卡。形状与气泡不同（12px 圆角、左侧 3px 松绿内边线） */
+.yb-bubble.is-formula{padding:12px 18px 12px 21px;border-radius:var(--r-formula,12px);box-shadow:inset 3px 0 0 var(--accent,#1D6B55);display:flex;align-items:center;min-height:52px;overflow-x:auto;overflow-y:hidden;white-space:normal;scrollbar-width:thin;scrollbar-color:var(--line-strong,#D5C7A6) transparent;-webkit-overflow-scrolling:touch}
+.yb-bubble.is-formula .yb-formula{margin:0;padding:0;border:0;background:none;border-radius:0;overflow:visible;font-size:1em;line-height:1;max-width:none}
+.yb-bubble.is-formula .katex{font-size:1.15em}
+.yb-bubble.is-formula .katex-display{margin:0;text-align:left}
+.yb-bubble.is-formula .katex-display>.katex{white-space:nowrap;text-align:left}
+
+/* 行内重点：荧光笔条（只在 explain/ask 里；lead 已整体高亮） */
+.yb-bubble strong{font-weight:650;color:inherit;background:linear-gradient(transparent 58%,var(--marker-line,#FFE58A) 58%,var(--marker-line,#FFE58A) 92%,transparent 92%);padding:0 1px}
+
+/* 等待指示：老师侧一个小气泡，三个点做依次明暗。网络等待与准备下一句共用同一形态。 */
+.yb-reply-wait{display:grid;grid-template-rows:0fr;opacity:0;width:100%}
+.yb-reply-wait>.yb-reply-wrap{min-height:0;overflow:hidden}
+.yb-reply-wait[data-state=in]{grid-template-rows:1fr;opacity:1;transition:grid-template-rows 260ms var(--ease-out,cubic-bezier(.22,1,.36,1)),opacity 260ms var(--ease-out,cubic-bezier(.22,1,.36,1))}
+.yb-reply-wait[data-state=out]{grid-template-rows:0fr;opacity:0;transition:grid-template-rows 300ms var(--ease-io,cubic-bezier(.37,0,.63,1)),opacity 140ms linear}
+.yb-reply-wait[data-state=static]{grid-template-rows:1fr;opacity:1}
+.yb-wait-pill{display:inline-flex;align-items:center;gap:6px;height:32px;padding:0 14px;margin-top:8px;background:var(--surface,#fff);border:1px solid var(--line,#E9DFC9);border-radius:16px 16px 16px 6px}
+.yb-wait-pill i{width:6px;height:6px;border-radius:50%;background:var(--accent,#1D6B55);opacity:.4;animation:yb-wave 1500ms var(--ease-io,cubic-bezier(.37,0,.63,1)) infinite}
+.yb-wait-pill i:nth-child(2){animation-delay:200ms}
+.yb-wait-pill i:nth-child(3){animation-delay:400ms}
+@keyframes yb-wave{0%{opacity:.4}30%{opacity:1}60%,100%{opacity:.4}}
+/* 网络等待（发送后到首个气泡之前）：300ms 后才淡入，避免快速回复时一闪 */
+.yb-net-wait{display:block;width:fit-content;align-self:flex-start;animation:yb-net-in 260ms var(--ease-out,cubic-bezier(.22,1,.36,1)) 300ms both}
+.yb-net-wait .yb-wait-pill{margin-top:0}
+.yb-net-wait[data-state=out]{animation:none;opacity:0;transition:opacity 140ms linear}
+@keyframes yb-net-in{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
+@media(prefers-reduced-motion:reduce){
+ .yb-reply-part[data-state],.yb-reply-wait[data-state]{transition:opacity 200ms linear!important;transform:none!important}
+ .yb-reply-part[data-state=enter]{grid-template-rows:1fr}
+ .yb-wait-pill i{animation:none;opacity:.7}
+ .yb-net-wait{animation:none;opacity:1}
+}

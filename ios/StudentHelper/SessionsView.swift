@@ -65,22 +65,25 @@ struct SessionsView: View {
         }
     }
     private func row(_ chat: LearningChat) -> some View {
-        Button { store.select(chat); dismiss() } label: {
-            HStack(spacing: 12) {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(chat.title).font(.system(size: 16, weight: .semibold)).foregroundStyle(chat.id == store.state.currentID ? Notebook.accent : Notebook.ink).lineLimit(1)
-                    Text(chat.draft.isEmpty ? chat.messages.last?.text ?? "发一道题开始" : "草稿 · " + chat.draft).font(.footnote).foregroundStyle(chat.draft.isEmpty ? Notebook.secondary : Notebook.amber).lineLimit(1)
-                }
-                Spacer(minLength: 0)
-                if store.pending.contains(chat.id) { Circle().fill(Notebook.amber).frame(width: 8, height: 8).accessibilityLabel("回复中") }
-                else if chat.id == store.state.currentID { Image(systemName: "checkmark").foregroundStyle(Notebook.accent) }
-            }.frame(minHeight: 60)
-        }.swipeActions { Button(role: .destructive) { deleting = chat } label: { Label("删除", systemImage: "trash") } }
-        .swipeActions(edge: .leading) { Button { title = chat.title; renaming = chat } label: { Label("重命名", systemImage: "pencil") }.tint(Notebook.accent) }
-        .contextMenu {
-            Button { title = chat.title; renaming = chat } label: { Label("重命名", systemImage: "pencil") }
-            Button(role: .destructive) { deleting = chat } label: { Label("删除", systemImage: "trash") }
+        HStack(spacing: 0) {
+            Button { store.select(chat); dismiss() } label: {
+                HStack(spacing: 12) {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(chat.title).font(.system(size: 16, weight: chat.id == store.state.currentID ? .semibold : .regular)).foregroundStyle(chat.id == store.state.currentID ? Notebook.softInk : Notebook.ink).lineLimit(1)
+                        Text(chat.draft.isEmpty ? chat.messages.last?.text ?? "发一道题开始" : "草稿 · " + chat.draft).font(.footnote).foregroundStyle(chat.draft.isEmpty ? Notebook.tertiary : Notebook.amber).lineLimit(1)
+                    }
+                    Spacer(minLength: 0)
+                    if store.pending.contains(chat.id) { Circle().fill(Notebook.accent).frame(width: 8, height: 8).accessibilityLabel("回复中") }
+                }.frame(minHeight: 60).contentShape(Rectangle())
+            }.buttonStyle(.plain)
+            Menu {
+                Button { title = chat.title; renaming = chat } label: { Label("重命名", systemImage: "pencil") }
+                Button(role: .destructive) { deleting = chat } label: { Label("删除", systemImage: "trash") }
+            } label: { Image(systemName: "ellipsis").foregroundStyle(Notebook.tertiary).frame(width: 44, height: 44) }.accessibilityLabel("管理聊天：" + chat.title)
         }
+        .listRowBackground(chat.id == store.state.currentID ? Notebook.soft : Notebook.surface)
+        .swipeActions { Button(role: .destructive) { deleting = chat } label: { Label("删除", systemImage: "trash") } }
+        .swipeActions(edge: .leading) { Button { title = chat.title; renaming = chat } label: { Label("重命名", systemImage: "pencil") }.tint(Notebook.accent) }
     }
 }
 

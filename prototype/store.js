@@ -8,7 +8,7 @@
  state.sessions.forEach(s=>{s.messages=Array.isArray(s.messages)?s.messages:[]});
  if(!state.sessions.length)state.sessions=structuredClone(seed.sessions);
  if(!state.sessions.some(s=>s.id===state.current))state.current=state.sessions[0].id;
- const pending=new Set(),imageBusy=new Set();const requests=new Map(),imageJobs=new Map();
+ const pending=new Set(),imageBusy=new Set(),stopped=new Set();const requests=new Map(),imageJobs=new Map();
  const notify=(type='state')=>window.dispatchEvent(new CustomEvent('student:change',{detail:type}));
  const persist=(type)=>{try{localStorage.setItem(key,JSON.stringify(state))}catch{notify('storage-error')}if(type)notify(type)};
  const current=()=>state.sessions.find(s=>s.id===state.current);
@@ -31,10 +31,11 @@
    const response=await fetch('/api/chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({messages}),signal:controller.signal});
    const data=await response.json();if(!response.ok)throw Error(data.error||'暂时无法回复，请重试');if(typeof data.reply!=='string'||!data.reply.trim())throw Error('没有收到回复，请重试');
    s.messages.push({role:'teacher',text:data.reply});s.failure=null;
-  }catch(error){s.failure=error.name==='AbortError'?'回复超时，请重试':error.message||'连接失败，请重试'}
-  finally{clearTimeout(timeout);requests.delete(s.id);pending.delete(s.id);persist('messages')}
+  }catch(error){s.failure=error.name==='AbortError'?(stopped.has(s.id)?'已停止':'回复超时，请重试'):error.message||'连接失败，请重试'}
+  finally{clearTimeout(timeout);requests.delete(s.id);pending.delete(s.id);stopped.delete(s.id);persist('messages')}
  }
  async function send(text){text=text.trim();const s=current(),images=s.draftAttachments||[];if((!text&&!images.length)||pending.has(s.id)||imageBusy.has(s.id))return;s.draft='';s.draftAttachments=[];if(!s.messages.length&&!s.titleEdited&&['新对话','新会话'].includes(s.title))s.title=text.slice(0,22)||'图片作业';const questions=parseQuestions(text);if(questions.length){s.questionQueue=questions;s.questionIndex=0}s.messages.push({role:questions.length&&!images.length?'paper':'user',text,...(images.length?{images}:{} )});s.waitingQuestion=false;s.live=true;persist('messages');notify('attachments');await reply(s)}
+ function stop(id=state.current){const c=requests.get(id);if(c){stopped.add(id);c.abort()}}
  function draft(text){current().draft=text;persist()}
  async function resources(files,course=state.course){for(const file of files){if(course&&!state.courses.includes(course))return;const image=/^image\//.test(file.type)||/\.(png|jpe?g|gif|webp)$/i.test(file.name)?await StudentImages.prepare(file):null;if(course&&!state.courses.includes(course)){if(image)await StudentImages.remove(image.id);return}state.resources.push({name:file.name,course,...(image?{image}:{})});persist('resources')}}
  function removeResource(index){const file=state.resources.splice(index,1)[0];persist('resources');if(file?.image&&!StudentImages.references(state).includes(file.image.id))StudentImages.remove(file.image.id).catch(()=>{})}
@@ -49,5 +50,5 @@
  function review(s,status){s.reviewStatus=status;persist('review')}
  async function importState(value){if(!value||!Array.isArray(value.courses)||!value.courses.every(c=>typeof c==='string')||!Array.isArray(value.sessions)||!value.sessions.length||!Array.isArray(value.resources)||!value.sessions.every(s=>typeof s.title==='string'&&typeof s.course==='string'&&Array.isArray(s.messages)&&s.messages.every(m=>typeof m.role==='string'&&(typeof m.text==='string'||typeof m.html==='string')))||!value.resources.every(r=>typeof r.name==='string'&&typeof r.course==='string'))throw Error('文件格式不正确');for(const s of value.sessions)for(const list of [s.draftAttachments,...s.messages.map(m=>m.images)])if(list!==undefined&&(!Array.isArray(list)||!list.every(i=>typeof i.id==='string'&&/^[\w-]{1,80}$/.test(i.id)&&typeof i.name==='string')))throw Error('图片记录格式不正确');await StudentImages.importAssets(value.imageAssets||[]);state.courses=value.courses;state.sessions=value.sessions;state.resources=value.resources;state.course=value.course||'';state.current=value.sessions.some(s=>s.id===value.current)?value.current:value.sessions[0].id;state.courseColors=value.courseColors||{};persist('import')}
  persist();
- window.StudentStore={state,current,create,select,addCourse,deleteCourse,renameSession,send,retry:()=>reply(current()),draft,resources,removeResource,useResource,attach,attachImages,removeImage,imageBusy,exportState,record,question,plain,pending,persist,nextQuestion,canNext,parseQuestions,deleteSession,review,importState};
+ window.StudentStore={state,current,create,select,addCourse,deleteCourse,renameSession,send,retry:()=>reply(current()),stop,draft,resources,removeResource,useResource,attach,attachImages,removeImage,imageBusy,exportState,record,question,plain,pending,persist,nextQuestion,canNext,parseQuestions,deleteSession,review,importState};
 })();

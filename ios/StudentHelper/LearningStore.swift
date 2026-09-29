@@ -9,6 +9,9 @@ final class LearningStore: ObservableObject {
     @Published var storageError: String?
     @Published var notice: String?
     @Published var importing = Set<AttachmentDestination>()
+    @Published var pacedReplyID: UUID?
+    @Published var pacing = false
+    @Published var skipToken = 0
     private var requests: [UUID: Task<Void, Never>] = [:]
     private let fileURL: URL
     let images: ImageRepository
@@ -50,7 +53,7 @@ final class LearningStore: ObservableObject {
         } catch { storageError = "暂时无法保存，请检查设备空间。" }
     }
     private func collectImages() { if importing.isEmpty { images.removeUnreferenced(in: state) } }
-    func select(_ chat: LearningChat) { state.currentID = chat.id; state.selectedCourse = chat.course; save() }
+    func select(_ chat: LearningChat) { pacedReplyID = nil; pacing = false; state.currentID = chat.id; state.selectedCourse = chat.course; save() }
     func newChat(course: String? = nil) {
         let chat = LearningChat(title: "新对话", course: course ?? state.selectedCourse)
         state.chats.insert(chat, at: 0); select(chat)
@@ -87,6 +90,7 @@ final class LearningStore: ObservableObject {
         state.chats[index].draft = text; save()
     }
     func send(_ text: String) async {
+        pacedReplyID = nil; pacing = false
         let clean = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard let id = state.currentID, !pending.contains(id), !importing.contains(.chat(id)), let index = state.chats.firstIndex(where: { $0.id == id }) else { return }
         let attachments = state.chats[index].draftImages ?? []
@@ -111,6 +115,7 @@ final class LearningStore: ObservableObject {
         requests[id] = nil
     }
     func stop() { if let id = state.currentID { requests[id]?.cancel() } }
+    func skipPacing() { skipToken += 1 }
     var canNext: Bool {
         guard let chat = current, let queue = chat.questionQueue else { return false }
         return queue.count > 1 && (chat.questionIndex ?? 0) < queue.count - 1
@@ -261,7 +266,11 @@ final class LearningStore: ObservableObject {
                 text = reply
             }
             try Task.checkCancellation()
-            if let target = state.chats.firstIndex(where: { $0.id == id }) { state.chats[target].messages.append(LearningMessage(role: "teacher", text: text)) }
+            if let target = state.chats.firstIndex(where: { $0.id == id }) {
+                let message = LearningMessage(role: "teacher", text: text)
+                if state.currentID == id { pacedReplyID = message.id }
+                state.chats[target].messages.append(message)
+            }
         } catch {
             if let target = state.chats.firstIndex(where: { $0.id == id }) {
                 state.chats[target].failure = Task.isCancelled ? "已停止。" : ((error as? ModelConnectionError)?.errorDescription ?? (error as? ImageImportError)?.errorDescription ?? (error as? ChatError)?.errorDescription ?? "连接失败，请重试。")

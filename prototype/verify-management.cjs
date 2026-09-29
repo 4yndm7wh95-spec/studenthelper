@@ -9,7 +9,7 @@ async function course(page, name) {
 }
 async function rename(page, id, name) {
   await page.locator('[data-action="session-menu"][data-session="'+id+'"]').click();
-  await page.locator('[data-action="rename-session"]').click();
+  await page.locator('#popover-root [data-action="rename-session"]').click();
   await page.locator('#session-name').fill('   ');
   assert.equal(await page.locator('#save-session-name').isDisabled(), true);
   await page.locator('#session-name').fill(name);
@@ -39,6 +39,10 @@ async function deleteCourse(page, name, cancel = false) {
     await course(page, '数学');
     const math = await page.evaluate(()=>StudentStore.state.current);
     await rename(page, math, '第二章作业');
+    assert.equal(await page.locator('#top-title').innerText(),'第二章作业');
+    await page.locator('#top-title').click();await page.locator('#session-name').fill('课程作业改名');
+    await page.locator('#save-session-name').click();await page.waitForSelector('#dialog[open]',{state:'hidden'});
+    await page.reload();assert.equal(await page.locator('#top-title').innerText(),'课程作业改名');
     await page.locator('#answer-input').fill('草稿保留');
     await deleteCourse(page, '数学', true);
     assert.equal(await page.locator('#answer-input').inputValue(), '草稿保留');
@@ -59,7 +63,7 @@ async function deleteCourse(page, name, cancel = false) {
     await page.evaluate(()=>{for(let i=0;i<10;i++)StudentStore.create('')});
     await page.locator('[data-action="sessions"]').click();
     await page.locator('#popover-root [data-action="session-menu"][data-session="1"]').click();
-    await page.locator('[data-action="rename-session"]').click();
+    await page.locator('#popover-root [data-action="rename-session"]').click();
     await page.locator('#session-name').fill('旧聊天也能改名');await page.locator('#save-session-name').click();
     await page.waitForSelector('#dialog[open]',{state:'hidden'});
     assert.equal(await page.evaluate(()=>StudentStore.state.sessions.find(s=>s.id===1).title),'旧聊天也能改名');
