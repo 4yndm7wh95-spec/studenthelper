@@ -1,14 +1,17 @@
 import plistlib
 import sys
 import zipfile
+from pathlib import Path
+
+source_info = plistlib.loads((Path(__file__).resolve().parents[1] / 'StudentHelper' / 'Info.plist').read_bytes())
 
 with zipfile.ZipFile(sys.argv[1]) as archive:
     prefix = 'Payload/StudentHelper.app/'
     info = plistlib.loads(archive.read(prefix + 'Info.plist'))
     assert info['CFBundleIdentifier'] == 'com.studenthelper.yibu'
     assert info['CFBundleSupportedPlatforms'] == ['iPhoneOS']
-    assert info['CFBundleShortVersionString'] == '0.4.2'
-    assert info['CFBundleVersion'] == '7'
+    assert info['CFBundleShortVersionString'] == source_info['CFBundleShortVersionString']
+    assert info['CFBundleVersion'] == source_info['CFBundleVersion']
     assert float(info['MinimumOSVersion']) >= 17.0
     binary = archive.read(prefix + info['CFBundleExecutable'])
     assert binary[:4] in [b'\xcf\xfa\xed\xfe', b'\xca\xfe\xba\xbe', b'\xbe\xba\xfe\xca'], 'Missing Mach-O executable'
