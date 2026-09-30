@@ -39,10 +39,14 @@ xcrun simctl launch "$DEVICE" com.studenthelper.yibu
 sleep 4
 xcrun simctl io "$DEVICE" screenshot build/iphone16pro.png
 xcrun simctl terminate "$DEVICE" com.studenthelper.yibu >/dev/null 2>&1 || true
-xcodebuild -project StudentHelper.xcodeproj -scheme StudentHelper -configuration Debug \
+if ! xcodebuild -project StudentHelper.xcodeproj -scheme StudentHelper -configuration Debug \
   -destination "platform=iOS Simulator,id=$DEVICE" -derivedDataPath build/simulator \
   -parallel-testing-enabled NO -resultBundlePath build/model-tests.xcresult \
-  CODE_SIGNING_ALLOWED=YES CODE_SIGN_IDENTITY=- test-without-building | tee model-tests.log
+  -test-timeouts-enabled YES -maximum-test-execution-time-allowance 120 \
+  CODE_SIGNING_ALLOWED=YES CODE_SIGN_IDENTITY=- test-without-building | tee model-tests.log; then
+  xcrun xcresulttool export attachments --path build/model-tests.xcresult --output-path build/ui-previews || true
+  exit 1
+fi
 DATA_CONTAINER=$(xcrun simctl get_app_container "$DEVICE" com.studenthelper.yibu data)
 cp "$DATA_CONTAINER/Library/Application Support/ios-vision-request.json" build/ios-vision-request.json
 xcrun xcresulttool export attachments --path build/model-tests.xcresult --output-path build/ui-previews

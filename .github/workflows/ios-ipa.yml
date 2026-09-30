@@ -82,5 +82,6 @@ jobs:
             ios/*-build.log
             ios/model-tests.log
             ios/build/model-tests.xcresult/
+            ios/build/ui-previews/
           if-no-files-found: ignore
           retention-days: 7
