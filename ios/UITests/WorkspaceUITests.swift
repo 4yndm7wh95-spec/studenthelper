@@ -13,6 +13,8 @@ final class WorkspaceUITests: XCTestCase {
             let attach = app.buttons["添加图片"]
             XCTAssertLessThan(abs(input.frame.midY - attach.frame.midY), 4, "Single-line input and attachment button must share a vertical center")
             input.typeText("draft")
+            let draftReady = XCTNSPredicateExpectation(predicate: NSPredicate(format: "value == %@", "draft"), object: input)
+            XCTAssertEqual(XCTWaiter.wait(for: [draftReady], timeout: 5), .completed)
             let keyboardShot = XCTAttachment(screenshot: app.screenshot())
             keyboardShot.name = preview ? "ChatKeyboard" : "EmptyChatKeyboard"
             keyboardShot.lifetime = .keepAlways; add(keyboardShot)
@@ -28,7 +30,12 @@ final class WorkspaceUITests: XCTestCase {
             XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 5))
             input.typeText("\nsecond line")
             XCTAssertTrue(app.keyboards.firstMatch.exists, "Editing inside the composer must retain keyboard focus")
-            XCTAssertEqual(input.value as? String, "draft\nsecond line")
+            // Tapping an existing draft positions the caret at the tap location.
+            // Check that editing preserves both parts, without assuming an end caret.
+            let edited = (input.value as? String) ?? ""
+            XCTAssertTrue(edited.contains("draft"))
+            XCTAssertTrue(edited.contains("\nsecond line"))
+            XCTAssertEqual(edited.count, "draft\nsecond line".count)
             app.terminate()
         }
     }
@@ -70,7 +77,7 @@ final class WorkspaceUITests: XCTestCase {
         app.coordinate(withNormalizedOffset: CGVector(dx: 0, dy: 0)).withOffset(CGVector(dx: center.midX, dy: center.midY)).tap()
         app.buttons["从相册选择"].tap()
         let media = app.descendants(matching: .any).matching(NSPredicate(format: "label BEGINSWITH[c] 'Photo,' OR label BEGINSWITH[c] 'Photo ' OR label BEGINSWITH '照片' OR label BEGINSWITH[c] 'Screenshot' OR label BEGINSWITH '屏幕快照'")).firstMatch
-        guard media.waitForExistence(timeout: 12) else {
+        guard media.waitForExistence(timeout: 60) else {
             let screenshot = XCTAttachment(screenshot: app.screenshot()); screenshot.name = "PhotoPicker"; screenshot.lifetime = .keepAlways; add(screenshot)
             XCTFail("System photo picker did not expose seeded image: " + app.debugDescription); return
         }

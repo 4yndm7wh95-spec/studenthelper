@@ -18,6 +18,10 @@ trap 'xcrun simctl shutdown "$DEVICE" >/dev/null 2>&1 || true' EXIT
 xcrun simctl boot "$DEVICE"
 xcrun simctl bootstatus "$DEVICE" -b
 xcrun simctl addmedia "$DEVICE" Tests/Fixtures/homework.png
+# Warm up the freshly created simulator's photo library before opening PHPicker.
+xcrun simctl launch "$DEVICE" com.apple.mobileslideshow
+sleep 5
+xcrun simctl terminate "$DEVICE" com.apple.mobileslideshow >/dev/null 2>&1 || true
 xcrun simctl status_bar "$DEVICE" override --time '9:41' --dataNetwork wifi --wifiMode active --wifiBars 3 --batteryState charged --batteryLevel 100
 set -o pipefail
 xcodebuild -project StudentHelper.xcodeproj -scheme StudentHelper -configuration Debug \
