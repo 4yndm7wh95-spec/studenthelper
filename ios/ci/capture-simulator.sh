@@ -50,3 +50,11 @@ xcrun simctl terminate "$DEVICE" com.studenthelper.yibu >/dev/null 2>&1 || true
 xcrun simctl launch "$DEVICE" com.studenthelper.yibu --model-settings-preview
 sleep 3
 xcrun simctl io "$DEVICE" screenshot build/iphone-model-settings.png
+xcrun simctl terminate "$DEVICE" com.studenthelper.yibu >/dev/null 2>&1 || true
+xcrun simctl ui "$DEVICE" appearance light
+xcrun simctl launch "$DEVICE" com.studenthelper.yibu --design-preview
+sleep 4
+xcrun simctl io "$DEVICE" screenshot build/iphone-claude-light.png
+xcrun simctl ui "$DEVICE" appearance dark
+sleep 3
+xcrun simctl io "$DEVICE" screenshot build/iphone-claude-dark.png

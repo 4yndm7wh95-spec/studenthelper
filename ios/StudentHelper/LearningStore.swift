@@ -23,7 +23,12 @@ final class LearningStore: ObservableObject {
 
     init(fileURL: URL? = nil) {
         let folder = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-        self.fileURL = fileURL ?? folder.appendingPathComponent("learning-state.json")
+        #if DEBUG
+        let designPreview = fileURL == nil && ProcessInfo.processInfo.arguments.contains("--design-preview")
+        #else
+        let designPreview = false
+        #endif
+        self.fileURL = fileURL ?? (designPreview ? FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString).appendingPathComponent("preview.json") : folder.appendingPathComponent("learning-state.json"))
         images = ImageRepository(folder: self.fileURL.deletingLastPathComponent().appendingPathComponent("image-assets", isDirectory: true))
         #if DEBUG
         let resetForUITest = fileURL == nil && ProcessInfo.processInfo.arguments.contains("--ui-tests-reset")
@@ -43,6 +48,15 @@ final class LearningStore: ObservableObject {
             state.chats[index].replyInProgress = false
             state.chats[index].failure = "上次回复已中断，可以重发。"
         }
+        #if DEBUG
+        if designPreview {
+            let chat = LearningChat(title: "条件概率", course: "概率论", messages: [
+                LearningMessage(role: "user", text: "为什么这两个概率相等，就能说明独立？"),
+                LearningMessage(role: "teacher", text: "**独立**就是：B是否发生，不改变A的概率。\n\n所以这两个概率要相等。\n\n\\[P(A\\mid B)=P(A\\mid\\bar B)\\]")
+            ])
+            state = LearningState(courses: ["概率论"], selectedCourse: "概率论", chats: [chat], currentID: chat.id)
+        }
+        #endif
     }
 
     func save() {

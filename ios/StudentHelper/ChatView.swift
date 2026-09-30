@@ -118,9 +118,9 @@ struct ChatView: View {
                 TextField(store.current?.waitingQuestion == true ? "发下一道题…" : "说说你的想法…", text: draft, axis: .vertical).lineLimit(1...5).reading().padding(.horizontal, 4).padding(.vertical, 10).frame(minHeight: 44).focused($inputFocused)
                 sendButton
             }.padding(.leading, 6).padding(.trailing, 4).padding(.vertical, 4)
-                .background(Notebook.surface, in: RoundedRectangle(cornerRadius: 24, style: .continuous))
-                .overlay(RoundedRectangle(cornerRadius: 24, style: .continuous).stroke(inputFocused ? Notebook.accent : Notebook.lineStrong, lineWidth: inputFocused ? 1.5 : 1))
-                .shadow(color: Color(red: 0.29, green: 0.2, blue: 0.08).opacity(0.08), radius: 12, y: 4)
+                .background(Notebook.surface, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+                .overlay(RoundedRectangle(cornerRadius: 22, style: .continuous).stroke(inputFocused ? Notebook.accent : Notebook.lineStrong, lineWidth: 0.5))
+                .shadow(color: Color.black.opacity(0.04), radius: 8, y: 2)
                 .animation(.linear(duration: 0.16), value: inputFocused)
         }.padding(.horizontal, 12).padding(.top, 8).padding(.bottom, 8).background(Notebook.paper)
     }
@@ -136,10 +136,10 @@ struct ChatView: View {
             }
         } label: {
             ZStack {
-                Circle().fill(disabled ? Notebook.disabledBg : mode == .skip ? Notebook.soft : Notebook.accent).frame(width: 40, height: 40)
+                RoundedRectangle(cornerRadius: 10, style: .continuous).fill(disabled ? Notebook.disabledBg : mode == .skip ? Notebook.soft : Notebook.accent).frame(width: 40, height: 40)
                 Image(systemName: mode == .stop ? "stop.fill" : mode == .skip ? "chevron.forward.2" : "arrow.up")
                     .font(.system(size: mode == .stop ? 14 : 17, weight: .bold))
-                    .foregroundStyle(disabled ? Notebook.disabledFg : mode == .skip ? Notebook.softInk : .white)
+                    .foregroundStyle(disabled ? Notebook.disabledFg : mode == .skip ? Notebook.softInk : Notebook.onAccent)
                     .contentTransition(reduced ? .opacity : .symbolEffect(.replace))
             }.frame(width: 44, height: 44).contentShape(Rectangle())
         }

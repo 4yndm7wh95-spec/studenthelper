@@ -69,7 +69,7 @@ struct SessionsView: View {
             Button { store.select(chat); dismiss() } label: {
                 HStack(spacing: 12) {
                     VStack(alignment: .leading, spacing: 4) {
-                        Text(chat.title).font(.system(size: 16, weight: chat.id == store.state.currentID ? .semibold : .regular)).foregroundStyle(chat.id == store.state.currentID ? Notebook.softInk : Notebook.ink).lineLimit(1)
+                        Text(chat.title).font(.system(size: 16, weight: chat.id == store.state.currentID ? .semibold : .regular)).foregroundStyle(Notebook.ink).lineLimit(1)
                         Text(chat.draft.isEmpty ? chat.messages.last?.text ?? "发一道题开始" : "草稿 · " + chat.draft).font(.footnote).foregroundStyle(chat.draft.isEmpty ? Notebook.tertiary : Notebook.amber).lineLimit(1)
                     }
                     Spacer(minLength: 0)
@@ -81,7 +81,7 @@ struct SessionsView: View {
                 Button(role: .destructive) { deleting = chat } label: { Label("删除", systemImage: "trash") }
             } label: { Image(systemName: "ellipsis").foregroundStyle(Notebook.tertiary).frame(width: 44, height: 44) }.accessibilityLabel("管理聊天：" + chat.title)
         }
-        .listRowBackground(chat.id == store.state.currentID ? Notebook.soft : Notebook.surface)
+        .listRowBackground(chat.id == store.state.currentID ? Notebook.sunk : Notebook.surface)
         .swipeActions { Button(role: .destructive) { deleting = chat } label: { Label("删除", systemImage: "trash") } }
         .swipeActions(edge: .leading) { Button { title = chat.title; renaming = chat } label: { Label("重命名", systemImage: "pencil") }.tint(Notebook.accent) }
         .contextMenu {

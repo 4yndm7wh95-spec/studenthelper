@@ -38,6 +38,8 @@ http.createServer(async (request, response) => {
   }
   const files = {'/':'index.html','/index.html':'index.html','/workspace.css':'workspace.css','/workspace.js':'workspace.js','/store.js':'store.js','/images.js':'images.js','/math-render.js':'math-render.js','/vendor/katex/katex.min.js':'vendor/katex/katex.min.js','/vendor/katex/katex.min.css':'vendor/katex/katex.min.css'};
   for(const font of fs.readdirSync(path.join(__dirname,'vendor/katex/fonts'))) if(font.endsWith('.woff2')) files['/vendor/katex/fonts/'+font]='vendor/katex/fonts/'+font;
+  files['/reply-style.css']='reply-style.css';
+  files['/claude-theme.css']='claude-theme.css';
   const file = files[url.pathname];
   if (!file) { response.writeHead(404); return response.end(); }
   fs.readFile(path.join(__dirname,file),(error,body)=>{

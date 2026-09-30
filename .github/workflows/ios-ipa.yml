@@ -66,6 +66,8 @@ jobs:
             ios/build/BUILD-INFO.txt
             ios/build/iphone16pro.png
             ios/build/iphone-model-settings.png
+            ios/build/iphone-claude-light.png
+            ios/build/iphone-claude-dark.png
             ios/build/ios-vision-request.json
             ios/build/ui-previews/
             ios/model-tests.log

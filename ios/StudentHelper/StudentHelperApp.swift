@@ -4,7 +4,7 @@ import SwiftUI
 struct StudentHelperApp: App {
     @StateObject private var store = LearningStore()
     var body: some Scene {
-        WindowGroup { WorkspaceView().environmentObject(store).tint(Notebook.accent).preferredColorScheme(.light) }
+        WindowGroup { WorkspaceView().environmentObject(store).tint(Notebook.accent) }
     }
 }
 
@@ -28,7 +28,7 @@ struct WorkspaceView: View {
         .toolbarBackground(Notebook.side, for: .tabBar).toolbarBackground(.visible, for: .tabBar)
         .overlay(alignment: .top) {
             if let text = store.notice {
-                Text(text).font(.footnote).foregroundStyle(Notebook.ink).padding(14).background(.white, in: Capsule()).shadow(color: .black.opacity(0.08), radius: 10, y: 4).padding(16)
+                Text(text).font(.footnote).foregroundStyle(Notebook.ink).padding(14).background(Notebook.surface, in: Capsule()).shadow(color: .black.opacity(0.08), radius: 10, y: 4).padding(16)
                     .transition(reduced ? .opacity : .move(edge: .top).combined(with: .opacity))
             }
         }

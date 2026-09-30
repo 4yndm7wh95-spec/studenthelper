@@ -1,37 +1,46 @@
 import SwiftUI
+import UIKit
 
-/// 一步 · 视觉令牌（对应 web/workspace.css :root）。仅浅色。
+/// 与网页 Claude 主题共用色值，跟随系统外观。
 enum Notebook {
     // 表面
-    static let paper = Color(hex: 0xFFFCF6)
-    static let side = Color(hex: 0xF6F0E2)
-    static let surface = Color.white
-    static let sunk = Color(hex: 0xF3ECDC)
-    static let paperCard = Color(hex: 0xFBF5E6)
+    static let paper = adaptive(0xF6F4EF, 0x1A1917)
+    static let side = adaptive(0xEFEDE6, 0x211F1C)
+    static let surface = adaptive(0xFFFFFF, 0x262522)
+    static let sunk = adaptive(0xECE9E0, 0x2E2C28)
+    static let paperCard = surface
     // 文字
-    static let ink = Color(hex: 0x221D14)
-    static let secondary = Color(hex: 0x4A4132)     // ink-2
-    static let tertiary = Color(hex: 0x6F6450)      // ink-3
+    static let ink = adaptive(0x1F1E1B, 0xF2EFE8)
+    static let secondary = adaptive(0x3D3B36, 0xD8D4CA)
+    static let tertiary = adaptive(0x6B675F, 0xA8A398)
     // 线
-    static let line = Color(hex: 0xE9DFC9)
-    static let lineStrong = Color(hex: 0xD5C7A6)
-    static let field = Color(hex: 0x9A8D72)
+    static let line = adaptive(0xE6E2D9, 0x3A3833)
+    static let lineStrong = adaptive(0xDAD6C9, 0x4A4741)
+    static let field = adaptive(0x8F8D84, 0xA8A398)
     // 强调
-    static let accent = Color(hex: 0x1D6B55)
-    static let accentPress = Color(hex: 0x134A39)
-    static let soft = Color(hex: 0xDDEFE6)
-    static let softInk = Color(hex: 0x134A39)
+    static let accent = adaptive(0xD97757, 0xE08A6C)
+    static let accentPress = adaptive(0xB85C38, 0xC9683F)
+    static let soft = adaptive(0xF7E6DE, 0x3A2A24)
+    static let softInk = adaptive(0x8A3F24, 0xF0B29C)
+    static let onAccent = adaptive(0xFFFFFF, 0x1A1917)
     // 荧光笔
-    static let marker = Color(hex: 0xFFEFB0)
-    static let markerEdge = Color(hex: 0xF2DA7E)
-    static let markerInk = Color(hex: 0x2B2200)
+    static let marker = Color.clear
+    static let markerEdge = Color.clear
+    static let markerInk = ink
     // 状态
-    static let amber = Color(hex: 0x8F5200)         // 保留旧名：草稿/警示
-    static let danger = Color(hex: 0xB3321F)
-    static let dangerSoft = Color(hex: 0xFCE6E0)
-    static let disabledBg = Color(hex: 0xEFE7D3)
-    static let disabledFg = Color(hex: 0xA79A82)
-    static let scrim = Color(red: 34/255, green: 29/255, blue: 20/255).opacity(0.42)
+    static let amber = adaptive(0x8A5A12, 0xE8C27A)
+    static let danger = adaptive(0xC8453B, 0xE5645A)
+    static let dangerSoft = adaptive(0xFCE6E0, 0x3A2422)
+    static let disabledBg = adaptive(0xECE9DF, 0x2E2C28)
+    static let disabledFg = adaptive(0xA8A69E, 0x6F6B63)
+    static let scrim = Color.black.opacity(0.36)
+
+    private static func adaptive(_ light: UInt32, _ dark: UInt32) -> Color {
+        Color(uiColor: UIColor { traits in
+            let value = traits.userInterfaceStyle == .dark ? dark : light
+            return UIColor(red: CGFloat((value >> 16) & 255) / 255, green: CGFloat((value >> 8) & 255) / 255, blue: CGFloat(value & 255) / 255, alpha: 1)
+        })
+    }
 
     // 动效
     static func message(_ reduced: Bool) -> Animation { reduced ? .linear(duration: 0.16) : .timingCurve(0.22, 1, 0.36, 1, duration: 0.32) }
@@ -43,11 +52,9 @@ extension Color {
     init(hex: UInt32) { self.init(.sRGB, red: Double((hex >> 16) & 255)/255, green: Double((hex >> 8) & 255)/255, blue: Double(hex & 255)/255, opacity: 1) }
 }
 
-/// 用户气泡 / 老师气泡的统一形状：三个 18pt 圆角 + 一个 6pt 尖角。
+/// 中性圆角消息，没有尾角。
 func bubbleShape(userSide: Bool) -> UnevenRoundedRectangle {
-    userSide
-    ? UnevenRoundedRectangle(topLeadingRadius: 18, bottomLeadingRadius: 18, bottomTrailingRadius: 6, topTrailingRadius: 18)
-    : UnevenRoundedRectangle(topLeadingRadius: 18, bottomLeadingRadius: 6, bottomTrailingRadius: 18, topTrailingRadius: 18)
+    UnevenRoundedRectangle(topLeadingRadius: 16, bottomLeadingRadius: 16, bottomTrailingRadius: 16, topTrailingRadius: 16)
 }
 
 struct ReadingStyle: ViewModifier {
@@ -74,7 +81,7 @@ struct NotebookButton: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         let pressed = configuration.isPressed
         configuration.label.font(.subheadline.weight(.medium)).frame(minHeight: 44).padding(.horizontal, 16)
-            .foregroundStyle(!enabled ? Notebook.disabledFg : primary ? .white : Notebook.ink)
+            .foregroundStyle(!enabled ? Notebook.disabledFg : primary ? Notebook.onAccent : Notebook.ink)
             .background(!enabled ? (primary ? Notebook.disabledBg : .clear) : primary ? (pressed ? Notebook.accentPress : Notebook.accent) : (pressed ? Notebook.sunk : Notebook.surface), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
             .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).stroke(primary ? .clear : (enabled ? Notebook.lineStrong : Notebook.line), lineWidth: 1))
             .animation(.linear(duration: reduced ? 0.01 : 0.12), value: pressed)
@@ -114,10 +121,10 @@ struct MessageRow: View {
                     ForEach(message.images ?? []) { image in
                         ImagePreviewButton(image: image).frame(maxWidth: .infinity).frame(height: min(240, 260 * CGFloat(image.height) / CGFloat(max(image.width, 1))))
                     }
-                    if !message.text.isEmpty { Text(message.text).font(.system(size: 16)).lineSpacing(10).tracking(0.3).foregroundStyle(.white).textSelection(.enabled) }
+                    if !message.text.isEmpty { Text(message.text).font(.system(size: 16)).lineSpacing(6).tracking(0.3).foregroundStyle(Notebook.ink).textSelection(.enabled) }
                 }
                 .padding(.horizontal, 16).padding(.vertical, 10)
-                .background(Notebook.accent, in: bubbleShape(userSide: true))
+                .background(Notebook.sunk, in: bubbleShape(userSide: true))
                 .frame(maxWidth: typeSize.isAccessibilitySize ? .infinity : 328, alignment: .trailing)
             }
         } else {
@@ -146,10 +153,8 @@ struct ThinkingRow: View {
             TimelineView(.animation(paused: reduced)) { ctx in
                 let t = ctx.date.timeIntervalSinceReferenceDate
                 HStack(spacing: 6) {
-                    ForEach(0..<3, id: \.self) { i in Circle().fill(Notebook.accent).frame(width: 6, height: 6).opacity(reduced ? 0.7 : level(t, i)) }
-                }.padding(.horizontal, 14).frame(height: 32)
-                    .background(Notebook.surface, in: bubbleShape(userSide: false))
-                    .overlay(bubbleShape(userSide: false).stroke(Notebook.line, lineWidth: 1))
+                    ForEach(0..<3, id: \.self) { i in Circle().fill(Notebook.tertiary).frame(width: 6, height: 6).opacity(reduced ? 0.7 : level(t, i)) }
+                }.frame(height: 24)
             }
             Spacer()
         }

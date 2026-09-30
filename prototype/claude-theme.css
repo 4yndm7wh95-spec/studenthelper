@@ -1,0 +1,73 @@
+/* 一步 · claude-theme.css（在 workspace.css、reply-style.css 之后加载）
+ * 依据：Claude 聊天产品的公开可见结构规律——暖白底 + 略深侧栏、居中窄阅读列、助手回复无气泡的正文排版、
+ * 用户消息为浅色圆角块、大圆角输入框、单一陶土色强调、其余全部中性暖灰。
+ * 说明：以下色值/尺寸是“依据我对 Claude 界面的认知所作的设计适配”，不是对 claude.ai 的实测。
+ */
+:root{
+ --paper:#F6F4EF;--side:#EFEDE6;--surface:#FFFFFF;--sunk:#ECE9E0;--paper-card:#FFFFFF;
+ --ink:#1F1E1B;--ink-2:#3D3B36;--ink-3:#6B675F;--ink-4:#A19D94;
+ --line:#E6E2D9;--line-strong:#DAD6C9;--line-hover:#C7C3B5;--field:#8F8D84;
+ --accent:#D97757;--accent-hover:#C9683F;--accent-press:#B85C38;--accent-soft:#F7E6DE;--accent-ink:#8A3F24;--danger:#C8453B;--warn-soft:#FBEFD9;--warn:#8A5A12;--on-accent:#FFFFFF;
+ --marker:transparent;--marker-line:transparent;--marker-edge:transparent;--marker-ink:var(--ink);
+ --hover:rgba(31,30,29,.05);--press:rgba(31,30,29,.09);--disabled-bg:#ECE9DF;--disabled-fg:#A8A69E;
+ --font-ui:-apple-system,BlinkMacSystemFont,"SF Pro Text","PingFang SC","Hiragino Sans GB","Microsoft YaHei UI","Noto Sans CJK SC",sans-serif;
+ --font-serif:"Songti SC","Noto Serif CJK SC","Source Han Serif SC",Georgia,"Times New Roman",serif;
+ --side-w:272px;--col:720px;--bubble-max:640px;--user-max:520px;
+ --r-bubble:16px;--r-composer:22px;--r-card:14px;
+ --sh-2:0 1px 2px rgba(31,30,29,.04),0 6px 20px rgba(31,30,29,.06);
+ --sh-3:0 4px 8px rgba(31,30,29,.05),0 20px 48px rgba(31,30,29,.14);
+ --scrim:rgba(31,30,29,.36);
+}
+::selection{background:var(--accent-soft);color:var(--ink)}
+body{background:var(--paper)}
+.yb-sidebar{border-right:0}
+.yb-topbar{border-bottom:0;background:var(--paper)}
+.yb-brand{font-family:var(--font-serif);font-weight:500;font-size:22px}
+.yb-brand-mark{background:var(--accent)}
+.yb-course.selected>.yb-course-heading>.yb-navrow{background:transparent;color:var(--ink);font-weight:600}
+.yb-session.selected{background:var(--hover);color:var(--ink);font-weight:500}
+@media(hover:hover){.yb-navrow:hover{background:var(--hover)}}
+.yb-session-inner{padding:2px 0}
+/* 用户消息：浅色圆角块，无尾角 */
+.yb-user{background:var(--sunk);color:var(--ink);border-radius:var(--r-bubble);padding:10px 16px}
+/* 老师回复：无框正文，衬线，宽松行距 */
+.yb-bubble{background:none;border:0;border-radius:0;padding:0;min-height:0;font-family:var(--font-serif);font-size:17px;line-height:1.75;color:var(--ink)}
+.yb-reply-part+.yb-reply-part>.yb-reply-wrap>.yb-bubble{margin-top:12px}
+.yb-bubble.is-lead{padding:0;background:none;border:0;font-weight:600;font-size:1em;color:var(--ink)}
+.yb-bubble.is-ask{padding:0 0 0 14px;border:0;border-left:2px solid var(--accent);border-radius:0;font-weight:500}
+.yb-bubble strong,.yb-bubble.is-lead strong{background:none;font-weight:650;padding:0}
+.yb-bubble.is-formula{padding:12px 16px;background:var(--surface);border:1px solid var(--line);border-radius:12px;box-shadow:none;min-height:0}
+/* 等待：三个中性小点，无气泡框 */
+.yb-wait-pill{background:none;border:0;padding:0;height:24px;border-radius:0}
+.yb-wait-pill i{background:var(--ink-3)}
+/* 输入区 */
+.yb-composer{border-color:var(--line-strong);border-radius:var(--r-composer);box-shadow:var(--sh-2)}
+.yb-composer:focus-within{border-color:var(--line-hover);box-shadow:var(--sh-2),0 0 0 3px rgba(193,95,60,.14)}
+.yb-send{border-radius:10px;background:var(--accent)}
+.yb-send:disabled{background:var(--disabled-bg);color:var(--disabled-fg)}
+.yb-welcome h1{font-family:var(--font-serif);font-weight:400;font-size:30px;line-height:40px}
+:where(button,a,summary,[tabindex]):focus-visible{outline-color:var(--accent)}
+@media(prefers-reduced-motion:reduce){*{animation-duration:.01ms!important;transition-duration:.01ms!important}}
+:root{--ok:#5E7F5A}
+.yb-save-dot{background:var(--ok)}
+
+/* 状态规则：每种状态只有一层表现 */
+.yb-user,.yb-paper,.yb-composer,.yb-formula{border:.5px solid var(--line)}
+.yb-user{border-color:transparent}
+.yb-fail{background:var(--warn-soft);color:var(--warn);border:0;border-radius:14px}
+.yb-dialog{border-radius:20px}
+@media(prefers-color-scheme:dark){:root{
+ color-scheme:dark;
+ --paper:#1A1917;--side:#211F1C;--surface:#262522;--sunk:#2E2C28;--paper-card:#262522;
+ --ink:#F2EFE8;--ink-2:#D8D4CA;--ink-3:#A8A398;--ink-4:#6F6B63;--line:#3A3833;--line-strong:#4A4741;--line-hover:#5A564F;
+ --accent:#E08A6C;--accent-soft:#3A2A24;--accent-ink:#F0B29C;--on-accent:#1A1917;--danger:#E5645A;--warn-soft:#3A2F1C;--warn:#E8C27A;
+ --hover:rgba(242,239,232,.06);--press:rgba(242,239,232,.10);--disabled-bg:var(--sunk);--disabled-fg:var(--ink-4);--sh-2:none;--scrim:rgba(0,0,0,.55)}}
+.yb-composer:focus-within{border-color:var(--line-hover);box-shadow:var(--sh-2),0 0 0 3px var(--hover)}
+.yb-sidebar-search:focus-within,.yb-search:focus-within,.yb-textfield:focus{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
+.yb-toast{color:var(--paper)}
+.yb-send[data-mode=skip]:active{background:var(--accent-soft)}
+@media(hover:hover){
+ .yb-secondary:hover:not(:disabled),.yb-chip:hover:not(:disabled){background:var(--sunk)}
+ .yb-session.selected:hover{background:var(--press)}
+ .yb-send[data-mode=skip]:hover{background:var(--accent-soft)}
+}
