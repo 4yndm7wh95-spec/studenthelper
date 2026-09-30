@@ -16,7 +16,11 @@ final class WorkspaceUITests: XCTestCase {
             let keyboardShot = XCTAttachment(screenshot: app.screenshot())
             keyboardShot.name = preview ? "ChatKeyboard" : "EmptyChatKeyboard"
             keyboardShot.lifetime = .keepAlways; add(keyboardShot)
-            app.scrollViews["chat-scroll"].coordinate(withNormalizedOffset: CGVector(dx: 0.9, dy: 0.8)).tap()
+            // Scroll-view accessibility frames can extend behind the keyboard.
+            // Tap a screen coordinate safely above the composer instead.
+            let whitespace = CGPoint(x: app.frame.midX, y: input.frame.minY - 32)
+            XCTAssertLessThan(whitespace.y, app.keyboards.firstMatch.frame.minY)
+            app.coordinate(withNormalizedOffset: .zero).withOffset(CGVector(dx: whitespace.x, dy: whitespace.y)).tap()
             let hidden = XCTNSPredicateExpectation(predicate: NSPredicate(format: "exists == false"), object: app.keyboards.firstMatch)
             XCTAssertEqual(XCTWaiter.wait(for: [hidden], timeout: 5), .completed)
             XCTAssertEqual(input.value as? String, "draft")
