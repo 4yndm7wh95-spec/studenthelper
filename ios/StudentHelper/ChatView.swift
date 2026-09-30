@@ -5,6 +5,7 @@ struct ChatView: View {
     @EnvironmentObject private var store: LearningStore
     @Environment(\.accessibilityReduceMotion) private var reduced
     @FocusState private var inputFocused: Bool
+    @ScaledMetric(relativeTo: .body) private var inputFontSize: CGFloat = 16
     @State private var sessionsOpen = false
     @State private var stick = true              // 贴底跟随：只有用户手动下拉（往回看）才置 false，内容变高不会
     @State private var showNewReply = false
@@ -44,6 +45,9 @@ struct ChatView: View {
                     VStack(spacing: 12) { EmptyNotebook(symbol: "pencil.line", title: "把题目发来") }.frame(maxWidth: .infinity).padding(.top, 120)
                 }
             }
+            .contentShape(Rectangle())
+            .simultaneousGesture(TapGesture().onEnded { inputFocused = false })
+            .accessibilityIdentifier("chat-scroll")
             .scrollDismissesKeyboard(.interactively)
             .simultaneousGesture(DragGesture(minimumDistance: 10).onChanged { if $0.translation.height > 6 { stick = false } })
             .overlay(alignment: .bottom) {
@@ -113,9 +117,12 @@ struct ChatView: View {
                 Button { Task { await store.nextQuestion() } } label: { Label("下一题", systemImage: "plus").font(.system(size: 14, weight: .medium)).padding(.horizontal, 14).frame(height: 44).background(Notebook.surface, in: Capsule()).overlay(Capsule().stroke(Notebook.lineStrong, lineWidth: 1)) }
                     .foregroundStyle(Notebook.ink).disabled(pending).frame(maxWidth: .infinity, alignment: .leading)
             }
-            HStack(alignment: .bottom, spacing: 4) {
+            HStack(alignment: .center, spacing: 4) {
                 ImageImportButton()
-                TextField(store.current?.waitingQuestion == true ? "发下一道题…" : "说说你的想法…", text: draft, axis: .vertical).lineLimit(1...5).reading().padding(.horizontal, 4).padding(.vertical, 10).frame(minHeight: 44).focused($inputFocused)
+                TextField(store.current?.waitingQuestion == true ? "发下一道题…" : "说说你的想法…", text: draft, axis: .vertical)
+                    .lineLimit(1...5).font(.system(size: inputFontSize)).foregroundStyle(Notebook.ink)
+                    .padding(.horizontal, 4).padding(.vertical, 10).frame(minHeight: 44)
+                    .focused($inputFocused).accessibilityIdentifier("chat-input")
                 sendButton
             }.padding(.leading, 6).padding(.trailing, 4).padding(.vertical, 4)
                 .background(Notebook.surface, in: RoundedRectangle(cornerRadius: 22, style: .continuous))

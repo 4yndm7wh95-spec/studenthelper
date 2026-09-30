@@ -7,8 +7,8 @@ settings:
   base:
     SWIFT_VERSION: "5.0"
     PRODUCT_BUNDLE_IDENTIFIER: com.studenthelper.yibu
-    MARKETING_VERSION: "0.4.3"
-    CURRENT_PROJECT_VERSION: "8"
+    MARKETING_VERSION: "0.4.4"
+    CURRENT_PROJECT_VERSION: "9"
     TARGETED_DEVICE_FAMILY: "1"
     ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
 targets:
@@ -23,8 +23,8 @@ targets:
       path: StudentHelper/Info.plist
       properties:
         CFBundleDisplayName: 一步
-        CFBundleShortVersionString: "0.4.3"
-        CFBundleVersion: "8"
+        CFBundleShortVersionString: "0.4.4"
+        CFBundleVersion: "9"
         UILaunchScreen: {}
         UISupportedInterfaceOrientations:
           - UIInterfaceOrientationPortrait
@@ -43,8 +43,8 @@ targets:
       base:
         GENERATE_INFOPLIST_FILE: NO
         CODE_SIGN_STYLE: Automatic
-        MARKETING_VERSION: "0.4.3"
-        CURRENT_PROJECT_VERSION: "8"
+        MARKETING_VERSION: "0.4.4"
+        CURRENT_PROJECT_VERSION: "9"
     scheme:
       testTargets:
         - StudentHelperTests

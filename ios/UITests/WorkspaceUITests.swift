@@ -1,6 +1,33 @@
 import XCTest
 
 final class WorkspaceUITests: XCTestCase {
+    func testTapChatWhitespaceDismissesKeyboardAndPreservesDraft() {
+        for preview in [false, true] {
+            let app = XCUIApplication()
+            app.launchArguments = preview ? ["--design-preview"] : ["--ui-tests-reset"]
+            app.launch()
+            let input = app.descendants(matching: .any).matching(identifier: "chat-input").firstMatch
+            XCTAssertTrue(input.waitForExistence(timeout: 5))
+            input.tap()
+            XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 5))
+            let attach = app.buttons["添加图片"]
+            XCTAssertLessThan(abs(input.frame.midY - attach.frame.midY), 4, "Single-line input and attachment button must share a vertical center")
+            input.typeText("draft")
+            let keyboardShot = XCTAttachment(screenshot: app.screenshot())
+            keyboardShot.name = preview ? "ChatKeyboard" : "EmptyChatKeyboard"
+            keyboardShot.lifetime = .keepAlways; add(keyboardShot)
+            app.scrollViews["chat-scroll"].coordinate(withNormalizedOffset: CGVector(dx: 0.9, dy: 0.8)).tap()
+            let hidden = XCTNSPredicateExpectation(predicate: NSPredicate(format: "exists == false"), object: app.keyboards.firstMatch)
+            XCTAssertEqual(XCTWaiter.wait(for: [hidden], timeout: 5), .completed)
+            XCTAssertEqual(input.value as? String, "draft")
+            input.tap()
+            XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 5))
+            input.typeText("\nsecond line")
+            XCTAssertTrue(app.keyboards.firstMatch.exists, "Editing inside the composer must retain keyboard focus")
+            XCTAssertEqual(input.value as? String, "draft\nsecond line")
+            app.terminate()
+        }
+    }
     private func app() -> XCUIApplication {
         let app = XCUIApplication(); app.launchArguments = ["--ui-tests-reset"]; app.launch(); return app
     }
