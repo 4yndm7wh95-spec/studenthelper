@@ -66,8 +66,9 @@ final class WorkspaceUITests: XCTestCase {
         app.alerts.buttons["取消"].tap()
         XCTAssertTrue(app.staticTexts["Math"].exists)
         app.buttons["管理课程：Math"].tap(); app.buttons["删除课程"].tap(); app.alerts.buttons["删除"].tap()
-        XCTAssertFalse(app.staticTexts["Math"].exists)
-        XCTAssertFalse(app.staticTexts["Homework"].exists)
+        let courseGone = XCTNSPredicateExpectation(predicate: NSPredicate(format: "exists == false"), object: app.staticTexts["Math"])
+        let chatGone = XCTNSPredicateExpectation(predicate: NSPredicate(format: "exists == false"), object: app.staticTexts["Homework"])
+        XCTAssertEqual(XCTWaiter.wait(for: [courseGone, chatGone], timeout: 8), .completed)
     }
     func testSystemPhotoPickerPreparesAndSendsActualImage() {
         let app = app()
