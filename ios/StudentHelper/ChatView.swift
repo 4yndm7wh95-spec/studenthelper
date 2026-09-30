@@ -11,7 +11,15 @@ struct ChatView: View {
     @State private var showNewReply = false
     @State private var renaming = false
     @State private var newTitle = ""
-    private var draft: Binding<String> { Binding(get: { store.current?.draft ?? "" }, set: { store.updateDraft($0) }) }
+    @State private var draftText = ""
+    // Keep the editor's immediate value local; publishing the entire learning
+    // state on every keystroke must not replace the editor's in-flight text.
+    private var draft: Binding<String> {
+        Binding(get: { draftText }, set: { text in
+            draftText = text
+            store.updateDraft(text)
+        })
+    }
     private var pending: Bool { store.current.map { store.pending.contains($0.id) } ?? false }
     private var importing: Bool { store.state.currentID.map { store.importing.contains(.chat($0)) } ?? false }
     private var hasDraft: Bool { !(store.current?.draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true) || !(store.current?.draftImages?.isEmpty ?? true) }
@@ -78,6 +86,11 @@ struct ChatView: View {
             ToolbarItem(placement: .topBarTrailing) { NavigationLink { SettingsView() } label: { Image(systemName: "gearshape").frame(width: 44, height: 44) }.accessibilityLabel("设置") }
         }
         .safeAreaInset(edge: .bottom, spacing: 0) { composer }
+        .onAppear { draftText = store.current?.draft ?? "" }
+        .onChange(of: store.state.currentID) { _, _ in draftText = store.current?.draft ?? "" }
+        .onChange(of: store.current?.draft) { _, text in
+            if draftText != (text ?? "") { draftText = text ?? "" }
+        }
         .sheet(isPresented: $sessionsOpen) { SessionsView().presentationDetents([.medium, .large]).presentationDragIndicator(.visible).presentationCornerRadius(20) }
         .alert("会话名称", isPresented: $renaming) {
             TextField("会话名称", text: $newTitle)
