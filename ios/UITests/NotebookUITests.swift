@@ -1,6 +1,10 @@
 import XCTest
 
 final class NotebookUITests: XCTestCase {
+    override func setUpWithError() throws {
+        continueAfterFailure = false
+        XCUIDevice.shared.orientation = .portrait
+    }
     private func application() -> XCUIApplication {
         let app = XCUIApplication()
         app.launchArguments = ["--notebook-test-id", UUID().uuidString]
@@ -45,7 +49,7 @@ final class NotebookUITests: XCTestCase {
         let app = application(); create(app, title: "Probability")
         app.buttons["paper-menu"].tap(); app.buttons["点阵"].tap()
         app.terminate(); app.launch()
-        let notebook = app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "Probability")).firstMatch
+        let notebook = app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", "打开笔记本：Probability")).firstMatch
         XCTAssertTrue(notebook.waitForExistence(timeout: 8)); notebook.tap()
         XCTAssertTrue(app.buttons["paper-menu"].waitForExistence(timeout: 5))
         XCTAssertTrue(app.buttons["paper-menu"].label.contains("点阵"))

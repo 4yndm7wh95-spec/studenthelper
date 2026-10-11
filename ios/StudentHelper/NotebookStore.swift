@@ -47,6 +47,7 @@ final class NotebookStore: ObservableObject {
         }
         normalizeSelection(&library)
         imageCache.countLimit = 24
+        imageCache.totalCostLimit = 64 * 1024 * 1024
         #if DEBUG
         if preview {
             let first = createNotebook(title: "微积分 · 课堂笔记", course: "高等数学", coverColor: "#496357")
@@ -221,7 +222,8 @@ final class NotebookStore: ObservableObject {
         let key = asset.fileName as NSString
         if let image = imageCache.object(forKey: key) { return image }
         guard let data = imageData(for: asset), let image = UIImage(data: data) else { return nil }
-        imageCache.setObject(image, forKey: key); return image
+        let cost = (image.cgImage?.width ?? 0) * (image.cgImage?.height ?? 0) * 4
+        imageCache.setObject(image, forKey: key, cost: cost); return image
     }
 
     func readContext(pageID: UUID) -> NoteReadContext? {
@@ -387,7 +389,13 @@ final class NotebookStore: ObservableObject {
     private func ensureWritable() throws { if isStorageReadOnly { throw NoteStorageError.readOnly } }
     private func report(_ error: Error) { storageError = error.localizedDescription }
     private func cache(_ drawing: PKDrawing, key: String) {
-        if drawingCache.count > 24 { drawingCache.removeAll() }
+        // Caching every saved stroke would retain many growing copies of a page.
+        // Keep one version per page; undo history references disk assets instead.
+        let pagePrefix = String(key.prefix(36)) + "-"
+        for oldKey in Array(drawingCache.keys) where oldKey.hasPrefix(pagePrefix) && oldKey != key {
+            drawingCache.removeValue(forKey: oldKey)
+        }
+        if drawingCache.count >= 8 && drawingCache[key] == nil { drawingCache.removeAll() }
         drawingCache[key] = drawing
     }
     private func retainPendingDrawing(_ drawing: PKDrawing, pageID: UUID) {

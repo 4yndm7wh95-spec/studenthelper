@@ -18,18 +18,23 @@ enum NotebookAgentError: LocalizedError {
 
 enum NoteTextRecognizer {
     static func recognize(_ data: Data) async throws -> String {
-        try await Task.detached(priority: .userInitiated) {
+        let request = VNRecognizeTextRequest()
+        let work = Task.detached(priority: .userInitiated) {
             try Task.checkCancellation()
             guard let source = CGImageSourceCreateWithData(data as CFData, nil),
                   let image = CGImageSourceCreateImageAtIndex(source, 0, nil) else { throw NotebookAgentError.unreadable }
-            let request = VNRecognizeTextRequest()
             request.recognitionLevel = .accurate
             request.usesLanguageCorrection = true
             let supported = try request.supportedRecognitionLanguages()
             request.recognitionLanguages = ["zh-Hans", "en-US"].filter { supported.contains($0) }
             try VNImageRequestHandler(cgImage: image).perform([request])
             return (request.results ?? []).compactMap { $0.topCandidates(1).first?.string }.joined(separator: "\n")
-        }.value
+        }
+        return try await withTaskCancellationHandler {
+            try await work.value
+        } onCancel: {
+            request.cancel(); work.cancel()
+        }
     }
 }
 
@@ -57,8 +62,14 @@ final class NotebookAssistantModel: ObservableObject {
     private var reads = 0
     private let notebookID: UUID
     private let pageID: UUID
+    private let configurationOverride: ModelConfiguration?
+    private let keyOverride: String?
+    private let session: URLSession
 
-    init(notebookID: UUID, pageID: UUID) { self.notebookID = notebookID; self.pageID = pageID }
+    init(notebookID: UUID, pageID: UUID, configuration: ModelConfiguration? = nil, key: String? = nil, session: URLSession = .shared) {
+        self.notebookID = notebookID; self.pageID = pageID
+        self.configurationOverride = configuration; self.keyOverride = key; self.session = session
+    }
     func cancel() { task?.cancel(); task = nil }
     func ask(store: NotebookStore) {
         let input = question.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -68,21 +79,25 @@ final class NotebookAssistantModel: ObservableObject {
             defer { busy = false; progress = "" }
             do { let result = try await run(input, store: store); try Task.checkCancellation(); answer = result }
             catch is CancellationError { proposals = [] }
-            catch { self.error = error.localizedDescription; proposals = [] }
+            catch { if !Task.isCancelled { self.error = error.localizedDescription }; proposals = [] }
         }
     }
     func apply(store: NotebookStore) {
         guard !busy, !proposals.isEmpty, !applied else { return }
+        NotificationCenter.default.post(name: .notebookFlushDrawing, object: nil)
+        guard store.pendingDrawingPageIDs.isDisjoint(with: Set(revisions.keys)) else {
+            error = "这页还有未保存的笔迹，请先保存后重新提问。"; proposals = []; return
+        }
         guard revisions.allSatisfy({ store.page(id: $0.key)?.updatedAt == $0.value }) else {
             error = NotebookAgentError.changed.localizedDescription; proposals = []; return
         }
         if store.apply(proposals.map(\.action)) != nil { applied = true; proposals = [] }
         else { error = store.storageError ?? "修改未能保存，请重试。" }
     }
-    private func run(_ input: String, store: NotebookStore) async throws -> String {
-        guard ModelConfiguration.mode == .direct else { throw NotebookAgentError.serviceMode }
-        let configuration = ModelConfiguration.load()
-        let key = try ModelKeychain().read(for: configuration)
+    func run(_ input: String, store: NotebookStore) async throws -> String {
+        guard configurationOverride != nil || ModelConfiguration.mode == .direct else { throw NotebookAgentError.serviceMode }
+        let configuration = configurationOverride ?? ModelConfiguration.load()
+        let key = try keyOverride ?? ModelKeychain().read(for: configuration)
         _ = try ModelClient.validatedKey(key)
         let region = selectedRegion
         let initial = try await read(pageID, region: region, store: store)
@@ -107,7 +122,7 @@ final class NotebookAssistantModel: ObservableObject {
         }
         for _ in 0..<6 {
             try Task.checkCancellation(); progress = "正在查看笔记"
-            let message = try await Self.complete(configuration: configuration, key: key, messages: messages)
+            let message = try await Self.complete(configuration: configuration, key: key, messages: messages, session: session)
             let calls = message["tool_calls"] as? [[String: Any]] ?? []
             if calls.isEmpty {
                 guard let text = message["content"] as? String, !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { throw ModelConnectionError.empty }
@@ -131,13 +146,14 @@ final class NotebookAssistantModel: ObservableObject {
     }
     private func scopedPage(_ id: UUID, store: NotebookStore) throws -> NotePage {
         guard let page = store.notebook(id: notebookID)?.pages.first(where: { $0.id == id }) else { throw NoteStorageError.missingPage }
+        if let previous = revisions[id], previous != page.updatedAt { throw NotebookAgentError.changed }
         if revisions[id] == nil { revisions[id] = page.updatedAt }
         return page
     }
     private func read(_ id: UUID, region: NoteRect? = nil, store: NotebookStore) async throws -> String {
         NotificationCenter.default.post(name: .notebookFlushDrawing, object: nil)
         let page = try scopedPage(id, store: store)
-        guard var context = store.readContext(pageID: id) else { throw NoteStorageError.missingPage }
+        guard var context = store.readContext(pageID: id) else { throw NotebookAgentError.unreadable }
         let bounded = try region?.clamped(pageWidth: page.width, pageHeight: page.height)
         let recognized: String
         if region == nil, let cached = ocr[id] { recognized = cached }
@@ -151,9 +167,21 @@ final class NotebookAssistantModel: ObservableObject {
             try Task.checkCancellation()
         }
         if let bounded { context.objects = context.objects.filter { $0.frame.cgRect.intersects(bounded.cgRect) } }
-        let json = String(decoding: try JSONEncoder().encode(context), as: UTF8.self)
+        let objectCount = context.objects.count
+        context.objects = context.objects.prefix(32).map { source in
+            var object = source
+            if case .text(var text) = object.content {
+                text.text = (bounded == nil || bounded!.cgRect.contains(object.frame.cgRect)) ? String(text.text.prefix(600)) : "（该文字框超出框选范围，请以区域OCR为准）"
+                object.content = .text(text)
+            }
+            return object
+        }
+        var json = String(decoding: try JSONEncoder().encode(context), as: UTF8.self)
+        while json.count > 6500, !context.objects.isEmpty {
+            context.objects.removeLast(); json = String(decoding: try JSONEncoder().encode(context), as: UTF8.self)
+        }
         let selection = bounded.map { "\n框选范围：x=\($0.x), y=\($0.y), width=\($0.width), height=\($0.height)" } ?? ""
-        return String((json + selection + "\n本机识别文字（可能不完整）：\n" + recognized).prefix(14000))
+        return json + selection + "\n对象共\(objectCount)项，本次包含\(context.objects.count)项，长注释最多600字。\n本机识别文字（可能不完整，最多7000字）：\n" + String(recognized.prefix(7000))
     }
     private func execute(_ name: String, args: [String: Any], store: NotebookStore) async throws -> String {
         guard let notebook = store.notebook(id: notebookID) else { throw NoteStorageError.missingNotebook }
@@ -237,8 +265,8 @@ final class NotebookAssistantModel: ObservableObject {
         request.httpBody = try JSONSerialization.data(withJSONObject: body)
         return request
     }
-    private static func complete(configuration: ModelConfiguration, key: String, messages: [[String: Any]]) async throws -> [String: Any] {
-        let (data, response) = try await URLSession.shared.data(for: request(configuration: configuration, key: key, messages: messages))
+    private static func complete(configuration: ModelConfiguration, key: String, messages: [[String: Any]], session: URLSession) async throws -> [String: Any] {
+        let (data, response) = try await session.data(for: request(configuration: configuration, key: key, messages: messages))
         guard let http = response as? HTTPURLResponse else { throw ModelConnectionError.response }
         guard (200..<300).contains(http.statusCode) else { throw ModelConnectionError.status(http.statusCode) }
         guard let body = try JSONSerialization.jsonObject(with: data) as? [String: Any],

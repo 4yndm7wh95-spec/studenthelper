@@ -46,6 +46,7 @@ xcrun simctl terminate "$DEVICE" com.studenthelper.yibu >/dev/null 2>&1 || true
 if ! xcodebuild -project StudentHelper.xcodeproj -scheme StudentHelper -configuration Debug \
   -destination "platform=iOS Simulator,id=$DEVICE" -derivedDataPath build/simulator \
   -parallel-testing-enabled NO -resultBundlePath build/model-tests.xcresult \
+  -skip-testing:StudentHelperUITests/NotebookUITests \
   -test-timeouts-enabled YES -maximum-test-execution-time-allowance 120 \
   CODE_SIGNING_ALLOWED=YES CODE_SIGN_IDENTITY=- test-without-building | tee model-tests.log; then
   xcrun xcresulttool export attachments --path build/model-tests.xcresult --output-path build/ui-previews || true

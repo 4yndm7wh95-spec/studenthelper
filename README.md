@@ -2,7 +2,9 @@
 
 从大学作业里边做边学。老师一次只讲一个小步骤，同一个聊天可以连续问多道题。
 
-网页：左侧课程和会话，右侧对话、记录、资料。原生 iPhone：SwiftUI，iOS 17+，主要为 iPhone 16 Pro 设计。视觉与动效依据实际向 Opus 5.5 咨询得到的“作业本”方案。
+网页：左侧课程和会话，右侧对话、记录、资料。原生 iPhone/iPad：SwiftUI，iOS 17+。iPad 默认进入手写笔记本工作区，支持 PencilKit 笔迹、纸张、图片与笔记助手。视觉延续现有“作业本”方案。
+
+iPad 功能与架构见 [笔记本说明](docs/IPAD-NOTEBOOK.md)。
 
 ## 使用
 
@@ -12,7 +14,7 @@ iPhone 客户端连接同一后端。在 App 的设置页填写 HTTPS 服务或�
 
 ## iOS 构建
 
-Actions 的 **Build iOS IPA** 工作流编译模拟器和物理 iPhone 版本、尝试启动 iPhone 16 Pro 模拟器、生成 `StudentHelper-unsigned.ipa`。结果位于 workflow artifacts。未签名 IPA 需要侧载工具签名后安装。没有自动配置证书或对外发布。
+Actions 的 **Build iOS IPA** 工作流编译通用 iPhone/iPad 版本，在两种模拟器执行测试并截图，生成 `StudentHelper-unsigned.ipa`。结果位于 workflow artifacts。未签名 IPA 需要侧载工具签名后安装。
 
 源码和构建说明见 [ios/README.md](ios/README.md)。
 

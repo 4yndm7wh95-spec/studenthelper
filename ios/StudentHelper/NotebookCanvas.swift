@@ -63,7 +63,7 @@ struct NotebookCanvas: UIViewRepresentable {
         host.pageView.selection.onEdit = { [weak coordinator = context.coordinator] objectID in
             coordinator?.editObject(objectID)
         }
-        host.pageView.selection.onGestureBegan = { [weak coordinator = context.coordinator] in coordinator?.flushDrawing() }
+        host.pageView.selection.onGestureBegan = { [weak coordinator = context.coordinator] in _ = coordinator?.flushDrawing() }
         host.pageView.selection.onPreviewFrame = { [weak host] objectID, rect in
             host?.pageView.previewFrame(rect, objectID: objectID)
         }
@@ -110,14 +110,14 @@ struct NotebookCanvas: UIViewRepresentable {
                 forName: UIApplication.willResignActiveNotification, object: nil, queue: .main
             ) { [weak self] _ in
                 MainActor.assumeIsolated {
-                    self?.flushDrawing()
+                    _ = self?.flushDrawing()
                     self?.endDrawingGroup()
                 }
             }
             flushObserver = NotificationCenter.default.addObserver(
                 forName: .notebookFlushDrawing, object: nil, queue: .main
             ) { [weak self] _ in
-                MainActor.assumeIsolated { self?.flushDrawing() }
+                MainActor.assumeIsolated { _ = self?.flushDrawing() }
             }
         }
 
@@ -205,7 +205,7 @@ struct NotebookCanvas: UIViewRepresentable {
             // Native lasso menu actions can change ink outside a tool touch sequence.
             guard !usingTool else { return }
             let save = DispatchWorkItem { [weak self] in
-                MainActor.assumeIsolated { self?.flushDrawing() }
+                MainActor.assumeIsolated { _ = self?.flushDrawing() }
             }
             pendingSave = save
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.15, execute: save)
