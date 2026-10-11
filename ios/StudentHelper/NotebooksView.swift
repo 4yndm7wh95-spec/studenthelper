@@ -52,12 +52,12 @@ struct NotebooksView: View {
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
                     Button { settings = true } label: {
-                        Image(systemName: "gearshape").frame(width: 44, height: 44)
+                        Image(systemName: "gearshape").frame(width: 44, height: 44).contentShape(Rectangle())
                     }.accessibilityLabel("设置")
                 }
                 ToolbarItem(placement: .topBarTrailing) {
                     Button { creating = true } label: {
-                        Image(systemName: "plus").frame(width: 44, height: 44)
+                        Image(systemName: "plus").frame(width: 44, height: 44).contentShape(Rectangle())
                     }.accessibilityLabel("新建笔记本").accessibilityIdentifier("notebook-create").disabled(store.isStorageReadOnly)
                 }
             }
@@ -166,7 +166,7 @@ struct NotebooksView: View {
                     Button(role: .destructive) { deleting = book } label: { Label("删除笔记本", systemImage: "trash") }
                 } label: {
                     Image(systemName: "ellipsis").font(.system(size: 16)).foregroundStyle(Notebook.tertiary)
-                        .frame(width: 44, height: 44)
+                        .frame(width: 44, height: 44).contentShape(Rectangle())
                 }.accessibilityLabel("管理笔记本：" + book.title).disabled(store.isStorageReadOnly)
             }.frame(height: 28)
         }
@@ -240,7 +240,7 @@ private struct NewNotebookSheet: View {
                             Button { cover = value } label: {
                                 Circle().fill(notebookHexColor(value)).frame(width: 30, height: 30)
                                     .overlay { if cover == value { Image(systemName: "checkmark").font(.caption.weight(.bold)).foregroundStyle(.white) } }
-                                    .frame(width: 44, height: 44)
+                                    .frame(width: 44, height: 44).contentShape(Rectangle())
                             }.buttonStyle(.plain).accessibilityLabel(notebookColorName(value))
                                 .accessibilityAddTraits(cover == value ? .isSelected : [])
                         }
@@ -363,7 +363,7 @@ private struct NotebookEditorView: View {
                     Toggle("用手指书写", isOn: $fingerDrawing)
                     Button { bookTitle = book?.title ?? ""; renamingBook = true } label: { Label("笔记本名称", systemImage: "pencil") }
                     Button { settings = true } label: { Label("设置", systemImage: "gearshape") }
-                } label: { Image(systemName: "ellipsis").frame(width: 44, height: 44) }.accessibilityLabel("笔记本选项")
+                } label: { Image(systemName: "ellipsis").frame(width: 44, height: 44).contentShape(Rectangle()) }.accessibilityLabel("笔记本选项")
             }
             ToolbarItemGroup(placement: .keyboard) {
                 Spacer()
@@ -476,7 +476,7 @@ private struct NotebookEditorView: View {
         VStack(spacing: 0) {
             HStack(spacing: 10) {
                 Button { finishTitleEditing(); dismissKeyboard(); railOverride = !expanded } label: {
-                    Image(systemName: "sidebar.left").frame(width: 44, height: 44)
+                    Image(systemName: "sidebar.left").frame(width: 44, height: 44).contentShape(Rectangle())
                         .foregroundStyle(expanded ? Notebook.accent : Notebook.secondary)
                 }.accessibilityLabel(expanded ? "收起页面列表" : "展开页面列表")
                 if let page {
@@ -505,14 +505,14 @@ private struct NotebookEditorView: View {
                     widthControl
                     toolbarDivider
                     Button { finishTitleEditing(); dismissKeyboard(); undoTrigger += 1 } label: {
-                        Image(systemName: "arrow.uturn.backward").frame(width: 44, height: 44)
+                        Image(systemName: "arrow.uturn.backward").frame(width: 44, height: 44).contentShape(Rectangle())
                     }.accessibilityLabel("撤销").disabled(!store.canUndo)
                     Button { finishTitleEditing(); dismissKeyboard(); redoTrigger += 1 } label: {
-                        Image(systemName: "arrow.uturn.forward").frame(width: 44, height: 44)
+                        Image(systemName: "arrow.uturn.forward").frame(width: 44, height: 44).contentShape(Rectangle())
                     }.accessibilityLabel("重做").disabled(!store.canRedo)
                     toolbarDivider
                     Image(systemName: fingerDrawing ? "hand.draw" : "pencil.tip.crop.circle")
-                        .font(.system(size: 18)).foregroundStyle(Notebook.tertiary).frame(width: 44, height: 44)
+                        .font(.system(size: 18)).foregroundStyle(Notebook.tertiary).frame(width: 44, height: 44).contentShape(Rectangle())
                         .accessibilityLabel(fingerDrawing ? "手指与 Apple Pencil 书写" : "仅 Apple Pencil 书写")
                 }.padding(.horizontal, 10).padding(.vertical, 7)
             }.foregroundStyle(Notebook.secondary)
@@ -526,7 +526,7 @@ private struct NotebookEditorView: View {
             Menu {
                 Button { finishTitleEditing(); dismissKeyboard(); photoImporter = true } label: { Label("从照片插入", systemImage: "photo") }
                 Button { finishTitleEditing(); dismissKeyboard(); fileImporter = true } label: { Label("从文件插入图片", systemImage: "folder") }
-            } label: { Image(systemName: "photo.badge.plus").frame(width: 44, height: 44) }
+            } label: { Image(systemName: "photo.badge.plus").frame(width: 44, height: 44).contentShape(Rectangle()) }
                 .accessibilityLabel("插入图片").accessibilityIdentifier("notebook-import")
                 .disabled(page == nil || importing || store.isStorageReadOnly)
             Button {
@@ -535,7 +535,7 @@ private struct NotebookEditorView: View {
                 if let onAsk { onAsk(notebookID, pageID) } else { assistant = true }
             } label: {
                 Image(systemName: "sparkles").font(.system(size: 20))
-                    .frame(width: 44, height: 44)
+                    .frame(width: 44, height: 44).contentShape(Rectangle())
                     .foregroundStyle(Notebook.softInk).background(Notebook.soft, in: RoundedRectangle(cornerRadius: 10))
             }.buttonStyle(.plain).disabled(page == nil || store.isStorageReadOnly)
                 .accessibilityLabel("就这一页问一步").accessibilityIdentifier("ask-notebook")
@@ -548,7 +548,7 @@ private struct NotebookEditorView: View {
         let pendingSave = page.map { store.pendingDrawingPageIDs.contains($0.id) } ?? false
         return HStack(spacing: 14) {
             Button { goToPage(at: currentIndex - 1) } label: {
-                Image(systemName: "chevron.left").frame(width: 44, height: 44)
+                Image(systemName: "chevron.left").frame(width: 44, height: 44).contentShape(Rectangle())
             }.accessibilityLabel("上一页").disabled(currentIndex == 0)
             Spacer()
             VStack(spacing: 2) {
@@ -564,7 +564,7 @@ private struct NotebookEditorView: View {
             }
             Spacer()
             Button { goToPage(at: currentIndex + 1) } label: {
-                Image(systemName: "chevron.right").frame(width: 44, height: 44)
+                Image(systemName: "chevron.right").frame(width: 44, height: 44).contentShape(Rectangle())
             }.accessibilityLabel("下一页").disabled(currentIndex >= pages.count - 1)
         }.padding(.horizontal, 10).background(Notebook.surface)
             .overlay(alignment: .top) { Rectangle().fill(Notebook.line).frame(height: 1) }
@@ -581,7 +581,7 @@ private struct NotebookEditorView: View {
         Button {
             finishTitleEditing(); dismissKeyboard(); tool = value
         } label: {
-            Image(systemName: symbol).font(.system(size: 20)).frame(width: 46, height: 44)
+            Image(systemName: symbol).font(.system(size: 20)).frame(width: 46, height: 44).contentShape(Rectangle())
                 .foregroundStyle(tool == value ? Notebook.accent : Notebook.secondary)
                 .background(tool == value ? Notebook.soft : .clear, in: RoundedRectangle(cornerRadius: 10))
         }.buttonStyle(.plain).accessibilityLabel(title).accessibilityAddTraits(tool == value ? .isSelected : [])
@@ -596,7 +596,7 @@ private struct NotebookEditorView: View {
                 Label("擦除经过的部分", systemImage: tool == .pixelEraser ? "checkmark" : "eraser.fill")
             }
         } label: {
-            Image(systemName: "eraser").font(.system(size: 20)).frame(width: 46, height: 44)
+            Image(systemName: "eraser").font(.system(size: 20)).frame(width: 46, height: 44).contentShape(Rectangle())
                 .foregroundStyle(tool == .vectorEraser || tool == .pixelEraser ? Notebook.accent : Notebook.secondary)
                 .background(tool == .vectorEraser || tool == .pixelEraser ? Notebook.soft : .clear, in: RoundedRectangle(cornerRadius: 10))
         }.accessibilityLabel("橡皮擦，选择擦除方式")
@@ -623,7 +623,7 @@ private struct NotebookEditorView: View {
             Button { addPage() } label: { Label("添加页面", systemImage: "plus") }
             Button(role: .destructive) { deletingPage = page } label: { Label("删除这一页", systemImage: "trash") }
         } label: {
-            Image(systemName: paperSymbol(page.paper)).frame(width: 44, height: 44)
+            Image(systemName: paperSymbol(page.paper)).frame(width: 44, height: 44).contentShape(Rectangle())
         }.accessibilityLabel("纸张与页面选项，当前\(page.paper.title)").accessibilityIdentifier("paper-menu").disabled(store.isStorageReadOnly)
     }
 
@@ -802,7 +802,7 @@ private struct NotebookInkPicker: View {
         Button { presented = true } label: {
             Circle().fill(color).frame(width: 22, height: 22)
                 .overlay(Circle().stroke(Notebook.lineStrong, lineWidth: 1))
-                .frame(width: 44, height: 44)
+                .frame(width: 44, height: 44).contentShape(Rectangle())
         }.buttonStyle(.plain).accessibilityLabel("墨水颜色")
             .popover(isPresented: $presented) {
                 VStack(alignment: .leading, spacing: 20) {
@@ -833,7 +833,7 @@ private struct NotebookInkPicker: View {
             Circle().fill(Color(hex: value)).frame(width: 28, height: 28)
                 .overlay(Circle().stroke(Notebook.lineStrong, lineWidth: 1))
                 .overlay { if selected { Image(systemName: "checkmark").font(.caption.weight(.bold)).foregroundStyle(value == 0xFFFFFF || value == 0xC59B36 ? .black : .white) } }
-                .frame(width: 44, height: 44)
+                .frame(width: 44, height: 44).contentShape(Rectangle())
         }.buttonStyle(.plain).accessibilityLabel(name).accessibilityAddTraits(selected ? .isSelected : [])
     }
 
@@ -860,7 +860,7 @@ private struct NotebookWidthPicker: View {
             VStack(spacing: 4) {
                 Capsule().fill(Notebook.secondary).frame(width: 24, height: min(max(width / 2, 2), 10))
                 Text(String(format: "%.0f", width)).font(.caption2).monospacedDigit()
-            }.frame(width: 44, height: 44)
+            }.frame(width: 44, height: 44).contentShape(Rectangle())
         }.buttonStyle(.plain).accessibilityLabel("笔画粗细：\(Int(width))")
             .popover(isPresented: $presented) {
                 VStack(alignment: .leading, spacing: 18) {
