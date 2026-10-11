@@ -1,6 +1,12 @@
 name: Build iPad IPA
 on:
   workflow_dispatch:
+    inputs:
+      test_scope:
+        description: Native checks to execute (MCP only is for a failed UI rerun)
+        type: choice
+        options: [all, mcp]
+        default: all
   push:
     branches: [main]
     paths: ["ios/**", ".github/workflows/ios-ipa.yml"]
@@ -34,6 +40,8 @@ jobs:
       - name: Test notebook and capture iPad simulator
         timeout-minutes: 18
         working-directory: ios
+        env:
+          IPAD_TEST_SCOPE: ${{ inputs.test_scope || 'all' }}
         run: bash ci/capture-ipad.sh
       - name: Compile for physical iPad
         working-directory: ios

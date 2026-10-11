@@ -17,11 +17,14 @@ trap 'xcrun simctl shutdown "$DEVICE" >/dev/null 2>&1 || true' EXIT
 xcrun simctl boot "$DEVICE"
 xcrun simctl bootstatus "$DEVICE" -b
 xcrun simctl status_bar "$DEVICE" override --time '9:41' --dataNetwork wifi --wifiMode active --wifiBars 3 --batteryState charged --batteryLevel 100
+TEST_TARGETS=(-only-testing:StudentHelperTests -only-testing:StudentHelperUITests/NotebookUITests)
+if [[ "${IPAD_TEST_SCOPE:-all}" == "mcp" ]]; then
+  TEST_TARGETS=(-only-testing:StudentHelperUITests/NotebookUITests/testMCPImportsProblemDrawsCorrectionAndUserCanStop)
+fi
 if ! xcodebuild -project StudentHelper.xcodeproj -scheme StudentHelper -configuration Debug \
   -destination "platform=iOS Simulator,id=$DEVICE" -derivedDataPath build/simulator \
   -parallel-testing-enabled NO -resultBundlePath build/ipad/notebook-tests.xcresult \
-  -only-testing:StudentHelperTests \
-  -only-testing:StudentHelperUITests/NotebookUITests \
+  "${TEST_TARGETS[@]}" \
   -test-timeouts-enabled YES -maximum-test-execution-time-allowance 180 \
   CODE_SIGNING_ALLOWED=YES CODE_SIGN_IDENTITY=- test | tee ipad-tests.log; then
   xcrun xcresulttool export attachments --path build/ipad/notebook-tests.xcresult --output-path build/ipad/previews || true

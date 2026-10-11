@@ -99,7 +99,12 @@ import UIKit
         openMenu(app.buttons["笔记本选项"]); app.buttons["设置"].firstMatch.tap()
         app.buttons["AI 连接"].tap()
         let toggle = app.switches["mcp-enable"]
-        XCTAssertTrue(toggle.waitForExistence(timeout: 5)); toggle.tap()
+        XCTAssertTrue(toggle.waitForExistence(timeout: 5))
+        // The identified SwiftUI row contains the actual trailing UISwitch.
+        let control = toggle.switches.firstMatch
+        XCTAssertTrue(control.exists); control.tap()
+        let enabled = XCTNSPredicateExpectation(predicate: NSPredicate(format: "value == '1'"), object: toggle)
+        XCTAssertEqual(XCTWaiter.wait(for: [enabled], timeout: 8), .completed)
         let address = app.descendants(matching: .any).matching(identifier: "mcp-endpoint").firstMatch
         XCTAssertTrue(address.waitForExistence(timeout: 8))
         let raw = ((address.value as? String) ?? address.label).replacingOccurrences(of: "连接地址：", with: "")
