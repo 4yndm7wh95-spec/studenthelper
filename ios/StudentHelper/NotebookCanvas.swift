@@ -211,7 +211,7 @@ struct NotebookCanvas: UIViewRepresentable {
             case .highlighter:
                 canvas.tool = PKInkingTool(.marker, color: color, width: max(8, min(60, width)))
             case .vectorEraser:
-                canvas.tool = PKEraserTool(.vector)
+                canvas.tool = PKEraserTool(.bitmap, width: max(8, min(80, width)))
             case .pixelEraser:
                 canvas.tool = PKEraserTool(.bitmap, width: max(8, min(80, width)))
             case .lasso:
@@ -441,12 +441,24 @@ final class NotebookCanvasHost: UIView {
         if fittedWidth == 0 {
             pageView.frame = CGRect(origin: .zero, size: pageSize)
             scrollView.contentSize = pageSize
-            let fit = min(1, max(0.25, (bounds.width - 40) / pageSize.width))
+            let fit = min(3, max(0.25, bounds.width / pageSize.width))
             scrollView.minimumZoomScale = min(fit, 0.5)
             scrollView.setZoomScale(fit, animated: false)
             fittedWidth = bounds.width
             centerPage()
             scrollView.contentOffset = CGPoint(x: -scrollView.contentInset.left, y: -scrollView.contentInset.top)
+        } else if abs(fittedWidth - bounds.width) > 1 {
+            let oldFit = min(3, max(0.25, fittedWidth / pageSize.width))
+            let newFit = min(3, max(0.25, bounds.width / pageSize.width))
+            let relativeZoom = scrollView.zoomScale / oldFit
+            let paperPoint = CGPoint(x: (scrollView.contentOffset.x + scrollView.bounds.midX) / scrollView.zoomScale,
+                                     y: (scrollView.contentOffset.y + scrollView.bounds.midY) / scrollView.zoomScale)
+            fittedWidth = bounds.width
+            scrollView.minimumZoomScale = min(newFit, 0.5)
+            scrollView.setZoomScale(min(scrollView.maximumZoomScale, max(scrollView.minimumZoomScale, newFit * relativeZoom)), animated: false)
+            centerPage()
+            scrollView.contentOffset = CGPoint(x: max(-scrollView.contentInset.left, paperPoint.x * scrollView.zoomScale - bounds.midX),
+                                               y: max(-scrollView.contentInset.top, paperPoint.y * scrollView.zoomScale - bounds.midY))
         } else {
             centerPage()
         }
@@ -468,8 +480,8 @@ final class NotebookCanvasHost: UIView {
 
     func centerPage() {
         let size = CGSize(width: pageSize.width * scrollView.zoomScale, height: pageSize.height * scrollView.zoomScale)
-        let horizontal = max(20, (scrollView.bounds.width - size.width) / 2)
-        let vertical = max(20, (scrollView.bounds.height - size.height) / 2)
+        let horizontal = max(0, (scrollView.bounds.width - size.width) / 2)
+        let vertical = max(0, (scrollView.bounds.height - size.height) / 2)
         scrollView.contentInset = UIEdgeInsets(top: vertical, left: horizontal, bottom: vertical, right: horizontal)
     }
 }

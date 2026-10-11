@@ -47,7 +47,8 @@ import UIKit
         XCTAssertEqual(XCTWaiter.wait(for: [second], timeout: 5), .completed)
         capture(app, "iPadNotebookGrid")
         app.buttons["套索"].tap(); app.buttons["钢笔"].tap()
-        openMenu(app.buttons["橡皮擦，选择擦除方式"]); app.buttons["擦除经过的部分"].tap()
+        app.buttons["橡皮擦"].tap()
+        XCTAssertFalse(app.buttons["擦除整笔"].exists)
         app.buttons["钢笔"].tap()
         app.buttons["ask-notebook"].tap()
         XCTAssertTrue(app.navigationBars["笔记助手"].waitForExistence(timeout: 5))
@@ -71,6 +72,23 @@ import UIKit
         RunLoop.current.run(until: Date().addingTimeInterval(1))
         capture(app, "iPadNotebookLandscape")
         XCUIDevice.shared.orientation = .portrait
+    }
+    func testToolDockSnapsToEveryEdgeAndEraserHasNoMenu() {
+        let app = application(); create(app, title: "Dock")
+        app.buttons["橡皮擦"].tap()
+        XCTAssertFalse(app.buttons["擦除整笔"].exists)
+        let dock = app.descendants(matching: .any).matching(identifier: "notebook-tool-dock").firstMatch
+        for (edge, point) in [("left", CGVector(dx: 0.025, dy: 0.5)), ("right", CGVector(dx: 0.975, dy: 0.5)),
+                              ("top", CGVector(dx: 0.5, dy: 0.15)), ("bottom", CGVector(dx: 0.5, dy: 0.9))] {
+            let handle = app.descendants(matching: .any).matching(identifier: "dock-drag-handle").firstMatch
+            XCTAssertTrue(handle.waitForExistence(timeout: 5))
+            handle.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
+                .press(forDuration: 0.15, thenDragTo: app.coordinate(withNormalizedOffset: point))
+            let snapped = NSPredicate { _, _ in (dock.value as? String) == edge }
+            XCTAssertEqual(XCTWaiter.wait(for: [XCTNSPredicateExpectation(predicate: snapped, object: nil)], timeout: 5), .completed)
+            capture(app, "iPadDock-" + edge)
+        }
+        XCTAssertTrue(app.buttons["钢笔"].isHittable)
     }
     func testFingerInkUndoRedoAndRestartPreserveNativeDrawing() {
         let app = application(); create(app, title: "Ink")

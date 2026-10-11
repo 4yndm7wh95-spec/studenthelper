@@ -324,32 +324,29 @@ private struct NotebookEditorView: View {
 
     private var editorSurface: some View {
         GeometryReader { geometry in
-            let expanded = railOverride ?? (geometry.size.width >= 700)
-            let sideRail = geometry.size.width >= 900
-            VStack(spacing: 0) {
-                editorControls(expanded: expanded, compact: geometry.size.width < 520)
-                Divider().overlay(Notebook.line)
-                if let page {
-                    if sideRail {
-                        HStack(spacing: 0) {
-                            if expanded { pagesRail(vertical: true).frame(width: 158); Divider().overlay(Notebook.line) }
-                            pageCanvas(page)
-                        }
-                    } else {
-                        VStack(spacing: 0) {
-                            if expanded { pagesRail(vertical: false); Divider().overlay(Notebook.line) }
-                            pageCanvas(page)
-                        }
-                    }
-                } else {
-                    VStack(spacing: 20) {
-                        EmptyNotebook(symbol: "doc", title: "还没有页面")
-                        Button("添加页面") { addPage() }.buttonStyle(NotebookButton())
-                    }.frame(maxWidth: .infinity, maxHeight: .infinity)
+            let expanded = railOverride ?? false
+            ZStack(alignment: .top) {
+                if let page { pageCanvas(page).ignoresSafeArea(edges: .bottom) }
+                else {
+                    Button("添加页面") { addPage() }.buttonStyle(NotebookButton())
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
                 }
-                if page != nil { pagingFooter }
-            }
-            .background(Notebook.paper)
+                editorControls(expanded: expanded, compact: geometry.size.width < 520)
+                    .padding(.horizontal, 12).padding(.top, 6)
+                if expanded {
+                    pagesRail(vertical: true).frame(width: 132)
+                        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 22))
+                        .padding(.top, 64).padding(.bottom, 112)
+                        .frame(maxWidth: .infinity, alignment: .leading).padding(.leading, 10)
+                        .transition(.move(edge: .leading).combined(with: .opacity))
+                }
+                if page != nil {
+                    NotebookToolDock { vertical in dockTools(vertical: vertical) }
+                        .disabled(store.isStorageReadOnly)
+                    VStack { Spacer(); pagingFooter.frame(width: 190).padding(.bottom, 8) }
+                        .allowsHitTesting(!automation.active)
+                }
+            }.background(Notebook.paper)
         }
     }
 
@@ -462,7 +459,7 @@ private struct NotebookEditorView: View {
 
     private func receiveToolCommand(_ notification: Notification) {
         guard let info = notification.userInfo, let pageID = info["pageID"] as? UUID, pageID == page?.id else { return }
-        if let raw = info["tool"] as? String, let value = NotebookDrawingTool(rawValue: raw) { tool = value }
+        if let raw = info["tool"] as? String, let value = NotebookDrawingTool(rawValue: raw) { tool = value == .vectorEraser ? .pixelEraser : value }
         if let hex = info["colorHex"] as? String { inkColor = notebookHexColor(hex) }
         if let width = info["width"] as? Double, width.isFinite {
             if tool == .highlighter { markerWidth = CGFloat(min(max(width, 8), 60)) }
@@ -494,30 +491,26 @@ private struct NotebookEditorView: View {
                 HStack(spacing: 10) { Spacer(); pageActions }.padding(.horizontal, 14).padding(.bottom, 4)
             }
 
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 5) {
-                    toolButton(.pen, symbol: "pencil.tip", title: "钢笔")
-                    toolButton(.highlighter, symbol: "highlighter", title: "荧光笔")
-                    eraserMenu
-                    toolButton(.lasso, symbol: "lasso", title: "套索")
-                    toolbarDivider
-                    colorControl
-                    widthControl
-                    toolbarDivider
-                    Button { finishTitleEditing(); dismissKeyboard(); undoTrigger += 1 } label: {
-                        Image(systemName: "arrow.uturn.backward").frame(width: 44, height: 44).contentShape(Rectangle())
-                    }.accessibilityLabel("撤销").disabled(!store.canUndo)
-                    Button { finishTitleEditing(); dismissKeyboard(); redoTrigger += 1 } label: {
-                        Image(systemName: "arrow.uturn.forward").frame(width: 44, height: 44).contentShape(Rectangle())
-                    }.accessibilityLabel("重做").disabled(!store.canRedo)
-                    toolbarDivider
-                    Image(systemName: fingerDrawing ? "hand.draw" : "pencil.tip.crop.circle")
-                        .font(.system(size: 18)).foregroundStyle(Notebook.tertiary).frame(width: 44, height: 44).contentShape(Rectangle())
-                        .accessibilityLabel(fingerDrawing ? "手指与 Apple Pencil 书写" : "仅 Apple Pencil 书写")
-                }.padding(.horizontal, 10).padding(.vertical, 7)
-            }.foregroundStyle(Notebook.secondary)
-                .disabled(page == nil || store.isStorageReadOnly)
-        }.background(Notebook.surface)
+        }.padding(2).background(.regularMaterial, in: RoundedRectangle(cornerRadius: 18))
+    }
+
+    @ViewBuilder private func dockTools(vertical: Bool) -> some View {
+        toolButton(.pen, symbol: "pencil.tip", title: "钢笔")
+        toolButton(.highlighter, symbol: "highlighter", title: "荧光笔")
+        toolButton(.pixelEraser, symbol: "eraser", title: "橡皮擦")
+        toolButton(.lasso, symbol: "lasso", title: "套索")
+        colorControl
+        widthControl
+        Button { finishTitleEditing(); dismissKeyboard(); undoTrigger += 1 } label: {
+            Image(systemName: "arrow.uturn.backward").frame(width: 44, height: 44).contentShape(Rectangle())
+        }.accessibilityLabel("撤销").disabled(!store.canUndo)
+        Button { finishTitleEditing(); dismissKeyboard(); redoTrigger += 1 } label: {
+            Image(systemName: "arrow.uturn.forward").frame(width: 44, height: 44).contentShape(Rectangle())
+        }.accessibilityLabel("重做").disabled(!store.canRedo)
+        Button { fingerDrawing.toggle() } label: {
+            Image(systemName: fingerDrawing ? "hand.draw" : "pencil.tip.crop.circle")
+                .frame(width: 44, height: 44).contentShape(Rectangle())
+        }.accessibilityLabel(fingerDrawing ? "切换为仅 Pencil 书写" : "切换为手指书写")
     }
 
     private var pageActions: some View {
@@ -566,8 +559,7 @@ private struct NotebookEditorView: View {
             Button { goToPage(at: currentIndex + 1) } label: {
                 Image(systemName: "chevron.right").frame(width: 44, height: 44).contentShape(Rectangle())
             }.accessibilityLabel("下一页").disabled(currentIndex >= pages.count - 1)
-        }.padding(.horizontal, 10).background(Notebook.surface)
-            .overlay(alignment: .top) { Rectangle().fill(Notebook.line).frame(height: 1) }
+        }.padding(.horizontal, 4).background(.regularMaterial, in: Capsule())
     }
 
     private func goToPage(at index: Int) {
@@ -585,21 +577,6 @@ private struct NotebookEditorView: View {
                 .foregroundStyle(tool == value ? Notebook.accent : Notebook.secondary)
                 .background(tool == value ? Notebook.soft : .clear, in: RoundedRectangle(cornerRadius: 10))
         }.buttonStyle(.plain).accessibilityLabel(title).accessibilityAddTraits(tool == value ? .isSelected : [])
-    }
-
-    private var eraserMenu: some View {
-        Menu {
-            Button { tool = .vectorEraser; dismissKeyboard() } label: {
-                Label("擦除整笔", systemImage: tool == .vectorEraser ? "checkmark" : "eraser")
-            }
-            Button { tool = .pixelEraser; dismissKeyboard() } label: {
-                Label("擦除经过的部分", systemImage: tool == .pixelEraser ? "checkmark" : "eraser.fill")
-            }
-        } label: {
-            Image(systemName: "eraser").font(.system(size: 20)).frame(width: 46, height: 44).contentShape(Rectangle())
-                .foregroundStyle(tool == .vectorEraser || tool == .pixelEraser ? Notebook.accent : Notebook.secondary)
-                .background(tool == .vectorEraser || tool == .pixelEraser ? Notebook.soft : .clear, in: RoundedRectangle(cornerRadius: 10))
-        }.accessibilityLabel("橡皮擦，选择擦除方式")
     }
 
     private var colorControl: some View {
