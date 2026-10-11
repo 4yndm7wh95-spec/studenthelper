@@ -100,9 +100,9 @@ import UIKit
         app.buttons["AI 连接"].tap()
         let toggle = app.switches["mcp-enable"]
         XCTAssertTrue(toggle.waitForExistence(timeout: 5)); toggle.tap()
-        let address = app.staticTexts["mcp-endpoint"]
+        let address = app.descendants(matching: .any).matching(identifier: "mcp-endpoint").firstMatch
         XCTAssertTrue(address.waitForExistence(timeout: 8))
-        let raw = address.label.replacingOccurrences(of: "连接地址：", with: "")
+        let raw = ((address.value as? String) ?? address.label).replacingOccurrences(of: "连接地址：", with: "")
         var url = try XCTUnwrap(URLComponents(string: raw)); url.host = "127.0.0.1"
         let endpoint = try XCTUnwrap(url.url)
         app.buttons["完成"].firstMatch.tap()

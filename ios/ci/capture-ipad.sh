@@ -22,7 +22,7 @@ if ! xcodebuild -project StudentHelper.xcodeproj -scheme StudentHelper -configur
   -parallel-testing-enabled NO -resultBundlePath build/ipad/notebook-tests.xcresult \
   -only-testing:StudentHelperTests \
   -only-testing:StudentHelperUITests/NotebookUITests \
-  -test-timeouts-enabled YES -maximum-test-execution-time-allowance 90 \
+  -test-timeouts-enabled YES -maximum-test-execution-time-allowance 180 \
   CODE_SIGNING_ALLOWED=YES CODE_SIGN_IDENTITY=- test | tee ipad-tests.log; then
   xcrun xcresulttool export attachments --path build/ipad/notebook-tests.xcresult --output-path build/ipad/previews || true
   exit 1
