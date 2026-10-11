@@ -47,6 +47,14 @@ struct NoteProposal: Identifiable {
 /// In-process notebook tools. Transport is separate from the editable document engine.
 @MainActor
 final class NotebookAssistantModel: ObservableObject {
+    private static var savedSessions: [UUID: NotebookAssistantModel] = [:]
+    static func session(notebookID: UUID, pageID: UUID) -> NotebookAssistantModel {
+        if let existing = savedSessions[pageID] { return existing }
+        if savedSessions.count >= 8, let old = savedSessions.first(where: { !$0.value.busy })?.key { savedSessions.removeValue(forKey: old) }
+        let model = NotebookAssistantModel(notebookID: notebookID, pageID: pageID)
+        savedSessions[pageID] = model
+        return model
+    }
     @Published var question = ""
     @Published var answer = ""
     @Published var busy = false
@@ -353,9 +361,10 @@ struct NotebookAssistantView: View {
     @State private var selectingRegion = false
     @State private var information = false
     @State private var pageImage: UIImage?
+    @State private var detent: PresentationDetent = .large
     private let pageID: UUID
     init(notebookID: UUID, pageID: UUID) {
-        _model = StateObject(wrappedValue: NotebookAssistantModel(notebookID: notebookID, pageID: pageID))
+        _model = StateObject(wrappedValue: NotebookAssistantModel.session(notebookID: notebookID, pageID: pageID))
         self.pageID = pageID
     }
     var body: some View {
@@ -399,6 +408,11 @@ struct NotebookAssistantView: View {
                 ToolbarItem(placement: .topBarTrailing) { Button { settings = true } label: { Image(systemName: "gearshape").frame(width: 44, height: 44) }.accessibilityLabel("模型设置") }
             }
             .sheet(isPresented: $settings) { NavigationStack { SettingsView().toolbar { ToolbarItem(placement: .confirmationAction) { Button("完成") { settings = false } } } } }
+        }.presentationDetents([.height(210), .large], selection: $detent)
+        .presentationDragIndicator(.visible)
+        .onChange(of: model.busy) { _, busy in
+            withAnimation(.timingCurve(0.42, 0, 0.58, 1, duration: 0.5)) { detent = busy ? .height(210) : .large }
+            if !busy, let page = store.page(id: pageID) { pageImage = try? NotebookPageRenderer.checkedImage(page: page, store: store) }
         }.aiInteractionLocked().task {
             NotificationCenter.default.post(name: .notebookFlushDrawing, object: nil)
             if let page = store.page(id: pageID) { pageImage = try? NotebookPageRenderer.checkedImage(page: page, store: store) }

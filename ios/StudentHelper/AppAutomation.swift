@@ -460,7 +460,16 @@ final class AppAutomation: ObservableObject {
         try Self.keys(args, allowed: ["scope", "chat_id", "course", "offset", "limit", "file_id", "image_id"])
         let scope = try Self.optionalString(args, "scope", maximum: 20) ?? "overview"
         status = "正在查看软件中的资料"
-        if scope == "overview" { return try Self.text(["destination": destination, "notebook_count": notebooks.notebooks.count, "selected_notebook_id": notebooks.currentNotebook?.id.uuidString ?? "", "selected_page_id": notebooks.currentPage?.id.uuidString ?? "", "course_count": learning?.state.courses.count ?? 0, "chat_count": learning?.state.chats.count ?? 0, "file_count": learning?.state.files.count ?? 0, "actions": AppAction.allCases.map(\.rawValue)]) }
+        if scope == "overview" {
+            var overview: [String: Any] = ["destination": destination, "notebook_count": notebooks.notebooks.count]
+            overview["selected_notebook_id"] = notebooks.currentNotebook?.id.uuidString ?? ""
+            overview["selected_page_id"] = notebooks.currentPage?.id.uuidString ?? ""
+            overview["course_count"] = learning?.state.courses.count ?? 0
+            overview["chat_count"] = learning?.state.chats.count ?? 0
+            overview["file_count"] = learning?.state.files.count ?? 0
+            overview["actions"] = AppAction.allCases.map(\.rawValue)
+            return try Self.text(overview)
+        }
         guard let learning else { throw AppAutomationError.unavailable("教题资料库未连接。") }
         switch scope {
         case "courses":
