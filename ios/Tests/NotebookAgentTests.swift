@@ -23,7 +23,7 @@ final class NotebookAgentTests: XCTestCase {
         let body = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
         let tools = try XCTUnwrap(body["tools"] as? [[String: Any]])
         let names = tools.compactMap { ($0["function"] as? [String: Any])?["name"] as? String }
-        XCTAssertEqual(Set(names), ["list_pages", "read_page", "read_region", "search_notes", "propose_annotation", "propose_create_page", "propose_paper", "propose_move_object", "propose_delete_object", "read_app_state", "list_notebooks", "read_ink", "perform_app_action"])
+        XCTAssertEqual(Set(names), ["list_pages", "read_page", "read_region", "search_notes", "propose_annotation", "propose_create_page", "propose_paper", "propose_move_object", "propose_delete_object", "read_app_state", "list_notebooks", "read_ink", "perform_app_action", "list_notebook_pages", "read_notebook_page", "search_notebook"])
         XCTAssertTrue(names.filter { $0.contains("delete") || $0.contains("move") }.allSatisfy { $0.hasPrefix("propose_") })
         XCTAssertEqual((body["messages"] as? [[String: String]])?.first?["content"], "查看这页")
     }
@@ -40,6 +40,7 @@ final class NotebookAgentTests: XCTestCase {
         NotebookAgentProtocol.replies = [
             ["role": "assistant", "content": NSNull(), "tool_calls": [
                 Self.call("foreign", "read_page", ["page_id": foreign.uuidString]),
+                Self.call("app-read", "read_notebook_page", ["page_id": foreign.uuidString]),
                 Self.call("add", "propose_annotation", ["page_id": page.uuidString, "text": "先看这一行", "x": 40, "y": 60, "width": 300, "height": 80])
             ]],
             ["role": "assistant", "content": "建议在本页写一条提示，尚未修改。"]
@@ -65,6 +66,9 @@ final class NotebookAgentTests: XCTestCase {
         let messages = try XCTUnwrap(second["messages"] as? [[String: Any]])
         let resultMessage = try XCTUnwrap(messages.first { ($0["tool_call_id"] as? String) == "foreign" })
         XCTAssertTrue((resultMessage["content"] as? String)?.contains("工具未执行") == true)
+        let appRead = try XCTUnwrap(messages.first { ($0["tool_call_id"] as? String) == "app-read" })
+        XCTAssertTrue((appRead["content"] as? String)?.contains(foreign.uuidString) == true)
+        XCTAssertFalse((appRead["content"] as? String)?.contains("工具未执行") == true)
         model.apply(store: store)
         XCTAssertTrue(model.applied)
         XCTAssertEqual(store.page(id: page)?.objects.first?.text, "先看这一行")
