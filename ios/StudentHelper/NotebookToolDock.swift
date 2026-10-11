@@ -88,8 +88,8 @@ struct NotebookToolDock<Content: View>: View {
         switch edge {
         case "left": return CGPoint(x: 46, y: y)
         case "right": return CGPoint(x: max(46, size.width - 46), y: y)
-        case "top": return CGPoint(x: x, y: 88)
-        default: return CGPoint(x: x, y: max(88, size.height - 82))
+        case "top": return CGPoint(x: x, y: 100)
+        default: return CGPoint(x: x, y: max(100, size.height - 94))
         }
     }
 }

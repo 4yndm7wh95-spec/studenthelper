@@ -21,6 +21,9 @@ TEST_TARGETS=(-only-testing:StudentHelperTests -only-testing:StudentHelperUITest
 if [[ "${IPAD_TEST_SCOPE:-all}" == "mcp" ]]; then
   TEST_TARGETS=(-only-testing:StudentHelperUITests/NotebookUITests/testMCPImportsProblemDrawsCorrectionAndUserCanStop)
 fi
+if [[ "${IPAD_TEST_SCOPE:-all}" == "dock" ]]; then
+  TEST_TARGETS=(-only-testing:StudentHelperUITests/NotebookUITests/testToolDockSnapsToEveryEdgeAndEraserHasNoMenu)
+fi
 if ! xcodebuild -project StudentHelper.xcodeproj -scheme StudentHelper -configuration Debug \
   -destination "platform=iOS Simulator,id=$DEVICE" -derivedDataPath build/simulator \
   -parallel-testing-enabled NO -resultBundlePath build/ipad/notebook-tests.xcresult \

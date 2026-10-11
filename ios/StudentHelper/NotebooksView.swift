@@ -547,6 +547,7 @@ private struct NotebookEditorView: View {
             VStack(spacing: 2) {
                 Text("\(currentIndex + 1) / \(pages.count)")
                     .font(.caption).monospacedDigit().foregroundStyle(Notebook.secondary)
+                    .lineLimit(1).fixedSize(horizontal: true, vertical: false)
                     .accessibilityIdentifier("page-index")
                     .accessibilityLabel("第 \(currentIndex + 1) 页，共 \(pages.count) 页")
                 if pendingSave {
