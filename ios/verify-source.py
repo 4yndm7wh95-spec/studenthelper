@@ -31,10 +31,12 @@ for source in sorted(list((root / 'StudentHelper').glob('*.swift')) + list((root
 project = yaml.safe_load((root / 'project.yml').read_text(encoding='utf-8-sig'))
 assert project['targets']['StudentHelper']['platform'] == 'iOS'
 assert project['options']['deploymentTarget']['iOS'] == '17.0'
+assert project['settings']['base']['TARGETED_DEVICE_FAMILY'] == '1,2'
 with (root / 'StudentHelper' / 'Info.plist').open('rb') as file:
     info = plistlib.load(file)
 assert info['NSAppTransportSecurity']['NSAllowsLocalNetworking'] is True
 assert 'NSAllowsArbitraryLoads' not in info['NSAppTransportSecurity']
+assert len(info['UISupportedInterfaceOrientations~ipad']) == 4
 assert info['CFBundleShortVersionString'] == project['settings']['base']['MARKETING_VERSION']
 assert info['CFBundleVersion'] == project['settings']['base']['CURRENT_PROJECT_VERSION']
 assert info['CFBundleShortVersionString'] == project['targets']['StudentHelper']['info']['properties']['CFBundleShortVersionString']

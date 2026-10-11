@@ -34,7 +34,10 @@ jobs:
       - name: Test model connection and capture iPhone simulator
         working-directory: ios
         run: bash ci/capture-simulator.sh
-      - name: Compile for physical iPhone
+      - name: Test notebook and capture iPad simulator
+        working-directory: ios
+        run: bash ci/capture-ipad.sh
+      - name: Compile for physical iPhone and iPad
         working-directory: ios
         run: |
           set -o pipefail
@@ -52,11 +55,11 @@ jobs:
           shasum -a 256 build/StudentHelper-unsigned.ipa > build/SHA256.txt
           printf 'Commit: %s\nSigning: unsigned; requires sideload signing\n' "$GITHUB_SHA" > build/BUILD-INFO.txt
           xcodebuild -version >> build/BUILD-INFO.txt
-          printf '## IPA ready\n\nUnsigned physical iPhone IPA. Sign with your sideloading tool before installation.\n' >> "$GITHUB_STEP_SUMMARY"
+          printf '## IPA ready\n\nUnsigned universal iPhone and iPad IPA. Sign with your sideloading tool before installation.\n' >> "$GITHUB_STEP_SUMMARY"
       - name: Upload IPA and preview
         uses: actions/upload-artifact@v4
         with:
-          name: StudentHelper-iPhone-unsigned
+          name: StudentHelper-iPhone-iPad-unsigned
           path: |
             ios/build/StudentHelper-unsigned.ipa
             ios/build/SHA256.txt
@@ -68,6 +71,8 @@ jobs:
             ios/build/ios-vision-request.json
             ios/build/ui-previews/
             ios/model-tests.log
+            ios/ipad-tests.log
+            ios/build/ipad/
           if-no-files-found: error
           retention-days: 14
       - name: Upload failure logs
@@ -78,6 +83,8 @@ jobs:
           path: |
             ios/*-build.log
             ios/model-tests.log
+            ios/ipad-tests.log
+            ios/build/ipad/
             ios/build/model-tests.xcresult/
             ios/build/ui-previews/
           if-no-files-found: ignore

@@ -7,11 +7,12 @@
   <key>CFBundleInfoDictionaryVersion</key><string>6.0</string>
   <key>CFBundleName</key><string>$(PRODUCT_NAME)</string>
   <key>CFBundlePackageType</key><string>APPL</string>
-  <key>CFBundleShortVersionString</key><string>0.4.4</string>
-  <key>CFBundleVersion</key><string>9</string>
+  <key>CFBundleShortVersionString</key><string>0.5.0</string>
+  <key>CFBundleVersion</key><string>10</string>
   <key>LSRequiresIPhoneOS</key><true/>
   <key>UILaunchScreen</key><dict/>
   <key>UISupportedInterfaceOrientations</key><array><string>UIInterfaceOrientationPortrait</string></array>
+  <key>UISupportedInterfaceOrientations~ipad</key><array><string>UIInterfaceOrientationPortrait</string><string>UIInterfaceOrientationPortraitUpsideDown</string><string>UIInterfaceOrientationLandscapeLeft</string><string>UIInterfaceOrientationLandscapeRight</string></array>
   <key>UIApplicationSupportsIndirectInputEvents</key><true/>
   <key>NSLocalNetworkUsageDescription</key><string>连接电脑上的学习服务以获取回复。</string>
   <key>NSAppTransportSecurity</key><dict>

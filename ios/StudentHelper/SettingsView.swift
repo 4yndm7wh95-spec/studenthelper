@@ -52,7 +52,7 @@ struct SettingsView: View {
                 LabeledContent("同步", value: "未开启")
                 Button("清空全部聊天", role: .destructive) { clearConfirmation = true }
             }
-            Section("关于") { LabeledContent("一步", value: "0.4.2") }
+            Section("关于") { LabeledContent("一步", value: Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "0.5.0") }
         }.scrollContentBackground(.hidden).background(Notebook.paper).navigationTitle("设置").navigationBarTitleDisplayMode(.inline)
         .onAppear { loadConfiguration() }
         .onChange(of: configuration.address) { _, _ in loadKeyForEndpoint(); feedback = nil }

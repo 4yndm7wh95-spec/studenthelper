@@ -13,6 +13,8 @@ with zipfile.ZipFile(sys.argv[1]) as archive:
     assert info['CFBundleShortVersionString'] == source_info['CFBundleShortVersionString']
     assert info['CFBundleVersion'] == source_info['CFBundleVersion']
     assert float(info['MinimumOSVersion']) >= 17.0
+    assert set(info['UIDeviceFamily']) == {1, 2}, 'Expected universal iPhone and iPad app'
+    assert len(info['UISupportedInterfaceOrientations~ipad']) == 4
     binary = archive.read(prefix + info['CFBundleExecutable'])
     assert binary[:4] in [b'\xcf\xfa\xed\xfe', b'\xca\xfe\xba\xbe', b'\xbe\xba\xfe\xca'], 'Missing Mach-O executable'
     assert prefix + 'Assets.car' in archive.namelist()
@@ -20,4 +22,4 @@ with zipfile.ZipFile(sys.argv[1]) as archive:
     assert prefix + 'WebMath/katex/katex.min.js' in archive.namelist()
     assert prefix + '_CodeSignature/CodeResources' not in archive.namelist(), 'Expected unsigned package'
     assert archive.testzip() is None
-    print('VERIFIED physical iPhone IPA:', info['CFBundleDisplayName'], info['MinimumOSVersion'], 'unsigned')
+    print('VERIFIED universal iPhone and iPad IPA:', info['CFBundleDisplayName'], info['MinimumOSVersion'], 'unsigned')
