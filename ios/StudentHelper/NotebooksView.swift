@@ -387,6 +387,9 @@ private struct NotebookEditorView: View {
         .onChange(of: pageTitleFocused) { _, focused in if !focused { finishTitleEditing() } }
         .onChange(of: book == nil) { _, missing in if missing { dismiss() } }
         .onChange(of: automation.active) { _, active in if active { finishTitleEditing(); dismissKeyboard() } }
+        .onChange(of: automation.navigationRevision) { _, _ in
+            if automation.active { settings = false; textEditor = false; photoImporter = false; fileImporter = false }
+        }
         .onReceive(NotificationCenter.default.publisher(for: .notebookToolCommand)) { notification in
             receiveToolCommand(notification)
         }

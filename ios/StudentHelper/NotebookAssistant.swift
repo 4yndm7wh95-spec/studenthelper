@@ -140,7 +140,7 @@ final class NotebookAssistantModel: ObservableObject {
         原始解题过程必须保留。不要擅自删除、擦掉、覆盖学生的笔迹或题图，只有用户明确要求时才删除原内容。
         不确定的内容编辑可通过propose工具提出，用户点“应用修改”之后才生效。以工具实际结果为准，失败时不能宣称成功。
         页坐标为原始纸张坐标，与屏幕缩放无关。保留原始笔迹；注释放在空白位置。
-        不用生成工具JSON作为最终回答。说明建议的变化；没有编辑要求时只回答，不提修改。
+        不用生成工具JSON作为最终回答。检查错点时可直接圈画并给简短纠正；仅解释概念时只回答。总结实际完成的变化，不重复整套正确答案，除非学生要求。
         """
         var messages: [[String: Any]] = [["role": "system", "content": prompt],
             ["role": "user", "content": "当前页面资料：\n" + initial + "\n\n问题：" + input]]
