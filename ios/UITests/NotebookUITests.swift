@@ -127,6 +127,7 @@ import UIKit
         _ = try await rpc(endpoint, token: token, id: 6, method: "tools/call", params: ["name": "perform_app_action", "arguments": ["action": "scroll_viewport", "parameters": ["page_id": pageID, "dy": 60]]])
         _ = try await rpc(endpoint, token: token, id: 7, method: "tools/call", params: ["name": "perform_app_action", "arguments": ["action": "zoom_viewport", "parameters": ["page_id": pageID, "zoom": 1, "x": 0, "y": 0]]])
         let request = Task { try? await self.rpc(endpoint, token: token, id: 8, method: "tools/call", params: ["name": "read_page", "arguments": ["page_id": pageID]]) }
+        await Task.yield()
         let stop = app.buttons["ai-stop"]
         XCTAssertTrue(stop.waitForExistence(timeout: 5))
         capture(app, "iPadAIReviewAndControl")
