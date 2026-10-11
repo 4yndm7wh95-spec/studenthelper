@@ -1,7 +1,7 @@
 import XCTest
 import UIKit
 
-final class NotebookUITests: XCTestCase {
+@MainActor final class NotebookUITests: XCTestCase {
     override func setUpWithError() throws {
         continueAfterFailure = false
         XCUIDevice.shared.orientation = .portrait
@@ -27,11 +27,18 @@ final class NotebookUITests: XCTestCase {
     private func capture(_ app: XCUIApplication, _ name: String) {
         let shot = XCTAttachment(screenshot: app.screenshot()); shot.name = name; shot.lifetime = .keepAlways; add(shot)
     }
+    // SwiftUI Menu exposes a wrapper button that XCTest cannot scroll to.
+    // Tap its observed onscreen bounds, then verify the menu actually opens.
+    private func openMenu(_ button: XCUIElement) {
+        XCTAssertTrue(button.waitForExistence(timeout: 5))
+        XCTAssertFalse(button.frame.isEmpty)
+        button.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
+    }
     func testNotebookPagePaperAndAssistantThroughUI() {
         let app = application(); create(app, title: "Calculus")
         let title = app.textFields["page-title"]
         XCTAssertTrue(title.waitForExistence(timeout: 5)); XCTAssertEqual(title.value as? String, "第 1 页")
-        app.buttons["paper-menu"].tap(); app.buttons["方格"].tap()
+        openMenu(app.buttons["paper-menu"]); app.buttons["方格"].tap()
         XCTAssertTrue(app.buttons["paper-menu"].label.contains("方格"))
         let add = app.buttons["page-create"]
         if !add.exists { app.buttons["展开页面列表"].tap() }
@@ -40,7 +47,7 @@ final class NotebookUITests: XCTestCase {
         XCTAssertEqual(XCTWaiter.wait(for: [second], timeout: 5), .completed)
         capture(app, "iPadNotebookGrid")
         app.buttons["套索"].tap(); app.buttons["钢笔"].tap()
-        app.buttons["橡皮擦，选择擦除方式"].tap(); app.buttons["擦除经过的部分"].tap()
+        openMenu(app.buttons["橡皮擦，选择擦除方式"]); app.buttons["擦除经过的部分"].tap()
         app.buttons["钢笔"].tap()
         app.buttons["ask-notebook"].tap()
         XCTAssertTrue(app.navigationBars["笔记助手"].waitForExistence(timeout: 5))
@@ -52,7 +59,7 @@ final class NotebookUITests: XCTestCase {
     }
     func testNotebookSurvivesRestartAndAdaptsToLandscape() {
         let app = application(); create(app, title: "Probability")
-        app.buttons["paper-menu"].tap(); app.buttons["点阵"].tap()
+        openMenu(app.buttons["paper-menu"]); app.buttons["点阵"].tap()
         app.terminate(); app.launch()
         let notebook = app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", "打开笔记本：Probability")).firstMatch
         XCTAssertTrue(notebook.waitForExistence(timeout: 8)); notebook.tap()
@@ -65,7 +72,7 @@ final class NotebookUITests: XCTestCase {
     }
     func testFingerInkUndoRedoAndRestartPreserveNativeDrawing() {
         let app = application(); create(app, title: "Ink")
-        app.buttons["笔记本选项"].tap(); app.buttons["用手指书写"].tap()
+        openMenu(app.buttons["笔记本选项"]); app.buttons["用手指书写"].tap()
         let canvas = app.descendants(matching: .any).matching(identifier: "notebook-canvas").firstMatch
         XCTAssertTrue(canvas.waitForExistence(timeout: 5))
         let from = canvas.coordinate(withNormalizedOffset: CGVector(dx: 0.3, dy: 0.35))
@@ -89,7 +96,7 @@ final class NotebookUITests: XCTestCase {
         let app = XCUIApplication(), token = UUID().uuidString
         app.launchArguments = ["--notebook-test-id", UUID().uuidString, "--mcp-test-token", token]
         app.launch(); create(app, title: "AI Review")
-        app.buttons["笔记本选项"].tap(); app.buttons["设置"].firstMatch.tap()
+        openMenu(app.buttons["笔记本选项"]); app.buttons["设置"].firstMatch.tap()
         app.buttons["AI 连接"].tap()
         let toggle = app.switches["mcp-enable"]
         XCTAssertTrue(toggle.waitForExistence(timeout: 5)); toggle.tap()
