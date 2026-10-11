@@ -1,7 +1,11 @@
 import SwiftUI
+import UIKit
 
 struct SettingsView: View {
     @EnvironmentObject private var store: LearningStore
+    @EnvironmentObject private var notebooks: NotebookStore
+    @EnvironmentObject private var automation: AppAutomation
+    @EnvironmentObject private var mcp: AppMCPServer
     @State private var configuration = ModelConfiguration()
     @State private var mode = ModelConnectionMode.direct
     @State private var key = ""
@@ -13,6 +17,8 @@ struct SettingsView: View {
     @State private var succeeded = false
     @State private var clearConfirmation = false
     @State private var removeKeyConfirmation = false
+    @State private var aiConnection = false
+    @State private var aiCopied = false
     private let keychain = ModelKeychain()
     var body: some View {
         Form {
@@ -34,6 +40,24 @@ struct SettingsView: View {
                 }.buttonStyle(.borderless)
                 if let feedback { Text(feedback).font(.footnote).foregroundStyle(succeeded ? Notebook.accent : Notebook.secondary) }
             }.disabled(checking)
+            Section {
+                DisclosureGroup("AI 连接", isExpanded: $aiConnection) {
+                    Toggle("允许连接", isOn: Binding(get: { mcp.enabled }, set: { enabled in
+                        aiCopied = false
+                        if enabled { mcp.start(notebooks: notebooks, learning: store, automation: automation) }
+                        else { mcp.stop() }
+                    })).accessibilityIdentifier("mcp-enable")
+                    if mcp.enabled {
+                        if !mcp.endpoint.isEmpty {
+                            Text(mcp.endpoint).font(.footnote).foregroundStyle(Notebook.secondary).textSelection(.enabled)
+                                .accessibilityLabel("连接地址：" + mcp.endpoint).accessibilityIdentifier("mcp-endpoint")
+                        }
+                        Button(aiCopied ? "已复制" : "复制配置") { copyAIConfiguration() }
+                            .disabled(mcp.endpoint.isEmpty || mcp.token == nil).accessibilityIdentifier("mcp-copy-config")
+                    }
+                    if let error = mcp.error { Text(error).font(.footnote).foregroundStyle(Notebook.danger) }
+                }
+            }
             Section {
                 DisclosureGroup("高级设置", isExpanded: $advanced) {
                     Picker("连接方式", selection: $mode) {
@@ -58,6 +82,7 @@ struct SettingsView: View {
         .onChange(of: configuration.address) { _, _ in loadKeyForEndpoint(); feedback = nil }
         .onChange(of: configuration.model) { _, _ in feedback = nil }
         .onChange(of: mode) { _, _ in feedback = nil }
+        .onChange(of: mcp.enabled) { _, _ in aiCopied = false }
         .alert("移除密钥？", isPresented: $removeKeyConfirmation) {
             Button("取消", role: .cancel) {}
             Button("移除", role: .destructive) {
@@ -69,6 +94,15 @@ struct SettingsView: View {
             Button("取消", role: .cancel) {}
             Button("清空", role: .destructive) { store.clearChats() }
         } message: { Text("所有消息、草稿和题目记录都会从本机删除。课程和文件名会保留。") }
+        .aiInteractionLocked()
+    }
+    private func copyAIConfiguration() {
+        guard mcp.enabled, !mcp.endpoint.isEmpty, let token = mcp.token else { return }
+        let configuration: [String: Any] = ["mcpServers": ["一步": ["url": mcp.endpoint, "headers": ["Authorization": "Bearer " + token]]]]
+        guard let data = try? JSONSerialization.data(withJSONObject: configuration, options: [.prettyPrinted, .sortedKeys]),
+              let string = String(data: data, encoding: .utf8) else { return }
+        UIPasteboard.general.string = string
+        aiCopied = true
     }
     private func loadConfiguration() {
         configuration = ModelConfiguration.load(); mode = ModelConfiguration.mode; serviceAddress = store.backend

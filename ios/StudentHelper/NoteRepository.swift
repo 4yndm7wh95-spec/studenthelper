@@ -2,6 +2,7 @@ import Foundation
 import PencilKit
 import UIKit
 import ImageIO
+import CryptoKit
 
 /// A single atomic index is the commit point. Every referenced asset is immutable:
 /// a failed commit leaves the previous index and all of its assets usable.
@@ -43,8 +44,17 @@ struct NoteRepository {
     func drawing(for page: NotePage) throws -> PKDrawing {
         guard let name = page.drawingAsset else { return PKDrawing() }
         guard safeAssetName(name, extension: "pkdraw") else { throw NoteStorageError.invalidAsset }
-        do { return try PKDrawing(data: Data(contentsOf: drawingsFolder.appendingPathComponent(name))) }
+        do {
+            let data = try Data(contentsOf: drawingsFolder.appendingPathComponent(name))
+            if let checksum = page.drawingChecksum, Self.checksum(data) != checksum { throw NoteStorageError.invalidAsset }
+            guard data.count >= PKDrawing().dataRepresentation().count else { throw NoteStorageError.invalidAsset }
+            return try PKDrawing(data: data)
+        }
         catch { throw NoteStorageError.invalidAsset }
+    }
+
+    static func checksum(_ data: Data) -> String {
+        SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
     }
 
     func importImage(_ data: Data, name: String) throws -> NoteImageAsset {

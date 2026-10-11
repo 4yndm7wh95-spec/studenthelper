@@ -1,4 +1,5 @@
 import XCTest
+import UIKit
 
 final class NotebookUITests: XCTestCase {
     override func setUpWithError() throws {
@@ -82,5 +83,70 @@ final class NotebookUITests: XCTestCase {
     private func waitForInk(_ canvas: XCUIElement, contains value: String) {
         let saved = XCTNSPredicateExpectation(predicate: NSPredicate(format: "value CONTAINS %@", value), object: canvas)
         XCTAssertEqual(XCTWaiter.wait(for: [saved], timeout: 8), .completed)
+    }
+
+    func testMCPImportsProblemDrawsCorrectionAndUserCanStop() async throws {
+        let app = XCUIApplication(), token = UUID().uuidString
+        app.launchArguments = ["--notebook-test-id", UUID().uuidString, "--mcp-test-token", token]
+        app.launch(); create(app, title: "AI Review")
+        app.buttons["笔记本选项"].tap(); app.buttons["设置"].firstMatch.tap()
+        app.buttons["AI 连接"].tap()
+        let toggle = app.switches["mcp-enable"]
+        XCTAssertTrue(toggle.waitForExistence(timeout: 5)); toggle.tap()
+        let address = app.staticTexts["mcp-endpoint"]
+        XCTAssertTrue(address.waitForExistence(timeout: 8))
+        let raw = address.label.replacingOccurrences(of: "连接地址：", with: "")
+        var url = try XCTUnwrap(URLComponents(string: raw)); url.host = "127.0.0.1"
+        let endpoint = try XCTUnwrap(url.url)
+        app.buttons["完成"].firstMatch.tap()
+        _ = try await rpc(endpoint, token: token, id: 1, method: "initialize", params: ["protocolVersion": "2025-06-18", "capabilities": [:], "clientInfo": ["name": "iPad UI review", "version": "1"]])
+        let state = try await rpc(endpoint, token: token, id: 2, method: "tools/call", params: ["name": "read_app_state", "arguments": ["scope": "overview"]])
+        let overview = try metadata(state)
+        let pageID = try XCTUnwrap(overview["selected_page_id"] as? String)
+        let image = UIGraphicsImageRenderer(size: CGSize(width: 640, height: 160)).image { output in
+            UIColor.white.setFill(); output.fill(CGRect(x: 0, y: 0, width: 640, height: 160))
+            ("Solve: 2x + 3 = 7" as NSString).draw(at: CGPoint(x: 28, y: 48), withAttributes: [.font: UIFont.systemFont(ofSize: 34), .foregroundColor: UIColor.black])
+        }
+        let data = try XCTUnwrap(image.pngData())
+        _ = try await rpc(endpoint, token: token, id: 3, method: "tools/call", params: ["name": "perform_app_action", "arguments": ["action": "add_image", "parameters": ["page_id": pageID, "name": "Problem", "data_base64": data.base64EncodedString()]]])
+        let points = (0...24).map { index -> [String: Double] in
+            let angle = Double(index) / 24 * .pi * 2
+            return ["x": 230 + cos(angle) * 80, "y": 500 + sin(angle) * 24]
+        }
+        _ = try await rpc(endpoint, token: token, id: 4, method: "tools/call", params: ["name": "perform_app_action", "arguments": ["action": "draw_stroke", "parameters": ["page_id": pageID, "points": points, "width": 2, "color": "#B45C45"]]])
+        let canvas = app.descendants(matching: .any).matching(identifier: "notebook-canvas").firstMatch
+        XCTAssertTrue(canvas.waitForExistence(timeout: 6)); waitForInk(canvas, contains: "图片1张"); waitForInk(canvas, contains: "手写1笔")
+        let request = Task { try? await self.rpc(endpoint, token: token, id: 5, method: "tools/call", params: ["name": "read_page", "arguments": ["page_id": pageID]]) }
+        let stop = app.buttons["ai-stop"]
+        XCTAssertTrue(stop.waitForExistence(timeout: 5))
+        capture(app, "iPadAIReviewAndControl")
+        stop.tap()
+        let released = XCTNSPredicateExpectation(predicate: NSPredicate(format: "exists == false"), object: stop)
+        XCTAssertEqual(XCTWaiter.wait(for: [released], timeout: 6), .completed)
+        _ = await request.value
+        XCTAssertTrue(app.buttons["钢笔"].isHittable)
+        app.buttons["撤销"].tap(); waitForInk(canvas, contains: "手写0笔"); waitForInk(canvas, contains: "图片1张")
+        app.buttons["重做"].tap(); waitForInk(canvas, contains: "手写1笔")
+        capture(app, "iPadProblemAndCorrection")
+    }
+    private func rpc(_ endpoint: URL, token: String, id: Int, method: String, params: [String: Any]) async throws -> [String: Any] {
+        var request = URLRequest(url: endpoint); request.httpMethod = "POST"; request.timeoutInterval = 15
+        request.setValue("Bearer " + token, forHTTPHeaderField: "Authorization")
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue("application/json, text/event-stream", forHTTPHeaderField: "Accept")
+        request.setValue("2025-06-18", forHTTPHeaderField: "MCP-Protocol-Version")
+        request.httpBody = try JSONSerialization.data(withJSONObject: ["jsonrpc": "2.0", "id": id, "method": method, "params": params])
+        let (data, response) = try await URLSession.shared.data(for: request)
+        XCTAssertEqual((response as? HTTPURLResponse)?.statusCode, 200)
+        let object = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
+        XCTAssertNil(object["error"])
+        let result = try XCTUnwrap(object["result"] as? [String: Any])
+        XCTAssertFalse((result["isError"] as? Bool) ?? false)
+        return result
+    }
+    private func metadata(_ result: [String: Any]) throws -> [String: Any] {
+        let content = try XCTUnwrap(result["content"] as? [[String: Any]])
+        let text = try XCTUnwrap(content.first?["text"] as? String)
+        return try XCTUnwrap(JSONSerialization.jsonObject(with: Data(text.utf8)) as? [String: Any])
     }
 }

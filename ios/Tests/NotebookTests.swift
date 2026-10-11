@@ -89,6 +89,35 @@ final class NotebookTests: XCTestCase {
         XCTAssertEqual(store.currentPage?.id, replacement)
     }
 
+    func testProblemImageKeepsAspectRatioAndLeavesRoomForHandwrittenSolution() throws {
+        _ = try XCTUnwrap(store.createNotebook(title: "图片题目"))
+        let page = try XCTUnwrap(store.currentPage)
+        let tallID = try XCTUnwrap(store.addImage(data: imageData(size: CGSize(width: 120, height: 600)), name: "竖向题目.png", to: page.id))
+        let tall = try XCTUnwrap(store.object(id: tallID, pageID: page.id)?.frame)
+        XCTAssertEqual(tall.x, 64, accuracy: 0.001)
+        XCTAssertEqual(tall.y, 64, accuracy: 0.001)
+        XCTAssertEqual(tall.width / tall.height, 0.2, accuracy: 0.001)
+        XCTAssertLessThanOrEqual(tall.height, page.height * 0.35 + 0.001)
+        XCTAssertGreaterThan(page.height - tall.y - tall.height, page.height * 0.5,
+                             "A tall problem must leave the lower half free for working through it")
+
+        let wideID = try XCTUnwrap(store.addImage(data: imageData(), name: "另一道题目.png", to: page.id))
+        let wide = try XCTUnwrap(store.object(id: wideID, pageID: page.id)?.frame)
+        XCTAssertEqual(wide.width / wide.height, 2, accuracy: 0.001)
+        XCTAssertLessThanOrEqual(wide.width, min(640, page.width - 128))
+        XCTAssertEqual(wide.y, tall.y + tall.height + 24, accuracy: 0.001)
+        XCTAssertFalse(tall.cgRect.intersects(wide.cgRect))
+        XCTAssertLessThanOrEqual(wide.y + wide.height, page.height)
+
+        let chosen = NoteRect(x: 300, y: 500, width: 240, height: 80)
+        let chosenID = try XCTUnwrap(store.addImage(data: imageData(), name: "自定尺寸.png", to: page.id, at: chosen))
+        XCTAssertEqual(store.object(id: chosenID, pageID: page.id)?.frame, chosen,
+                       "An explicit user frame must not be replaced by the default problem layout")
+        let restored = NotebookStore(folder: folder)
+        XCTAssertEqual(restored.object(id: tallID, pageID: page.id)?.frame, tall)
+        XCTAssertEqual(restored.object(id: wideID, pageID: page.id)?.frame, wide)
+    }
+
     func testDrawingGroupIsOneUndoAndRestoresNativeInkOnDisk() throws {
         _ = try XCTUnwrap(store.createNotebook())
         let pageID = try XCTUnwrap(store.currentPage?.id)
@@ -274,10 +303,10 @@ final class NotebookTests: XCTestCase {
         }
         return PKDrawing(strokes: strokes)
     }
-    private func imageData() throws -> Data {
+    private func imageData(size: CGSize = CGSize(width: 120, height: 60)) throws -> Data {
         let format = UIGraphicsImageRendererFormat(); format.scale = 1; format.opaque = false
-        let image = UIGraphicsImageRenderer(size: CGSize(width: 120, height: 60), format: format).image { context in
-            UIColor.systemGreen.setFill(); context.fill(CGRect(x: 20, y: 10, width: 80, height: 40))
+        let image = UIGraphicsImageRenderer(size: size, format: format).image { context in
+            UIColor.systemGreen.setFill(); context.fill(CGRect(x: 20, y: 10, width: max(1, size.width - 40), height: max(1, size.height - 20)))
         }
         return try XCTUnwrap(image.pngData())
     }

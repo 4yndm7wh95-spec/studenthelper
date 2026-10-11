@@ -6,6 +6,8 @@ import UIKit
 /// 笔记本沿用「一步」的纸面与文字层级；聊天继续使用原来的界面。
 struct NotebooksView: View {
     @EnvironmentObject private var store: NotebookStore
+    @EnvironmentObject private var automation: AppAutomation
+    @Environment(\.accessibilityReduceMotion) private var reduced
     var onAsk: ((UUID, UUID) -> Void)? = nil
     @State private var path: [UUID] = []
     @State private var search = ""
@@ -66,7 +68,7 @@ struct NotebooksView: View {
                 NewNotebookSheet { notebookID in
                     search = ""
                     path.append(notebookID)
-                }.presentationDetents([.medium, .large]).presentationDragIndicator(.visible)
+                }.presentationDetents([.medium, .large]).presentationDragIndicator(.visible).aiInteractionLocked()
             }
             .sheet(isPresented: $settings) { notebookSettingsSheet }
             .alert("笔记本名称", isPresented: Binding(get: { renaming != nil }, set: { if !$0 { renaming = nil } })) {
@@ -94,10 +96,26 @@ struct NotebooksView: View {
             }
         }
         .tint(Notebook.accent)
+        .task {
+            if automation.active || (automation.navigationRevision > 0 && automation.requestedNotebookID == store.currentNotebook?.id) { followAutomation() }
+        }
+        .onChange(of: automation.navigationRevision) { _, _ in followAutomation() }
+        .animation(reduced ? nil : .timingCurve(0.22, 1, 0.36, 1, duration: 0.38), value: path)
         .alert("无法保存笔记", isPresented: Binding(get: { store.storageError != nil && !store.isStorageReadOnly }, set: { if !$0 { store.storageError = nil } })) {
             Button("重试保存") { store.save() }
             Button("知道了", role: .cancel) { store.storageError = nil }
         } message: { Text(store.storageError ?? "") }
+    }
+
+    private func followAutomation() {
+        let notebookID = automation.requestedNotebookID ?? automation.requestedPageID.flatMap { pageID in
+            store.notebooks.first { $0.pages.contains { $0.id == pageID } }?.id
+        }
+        guard let notebookID, let book = store.notebook(id: notebookID) else { return }
+        creating = false; settings = false; search = ""
+        store.selectNotebook(notebookID)
+        if let pageID = automation.requestedPageID, book.pages.contains(where: { $0.id == pageID }) { store.selectPage(pageID) }
+        if path != [notebookID] { path = [notebookID] }
     }
 
     private var emptyShelf: some View {
@@ -128,7 +146,7 @@ struct NotebooksView: View {
             SettingsView().toolbar {
                 ToolbarItem(placement: .confirmationAction) { Button("完成") { settings = false } }
             }
-        }
+        }.aiInteractionLocked()
     }
 
     private func shelfBook(_ book: NoteBookDocument) -> some View {
@@ -249,7 +267,9 @@ private struct NewNotebookSheet: View {
 
 private struct NotebookEditorView: View {
     @EnvironmentObject private var store: NotebookStore
+    @EnvironmentObject private var automation: AppAutomation
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.accessibilityReduceMotion) private var reduced
     let notebookID: UUID
     var onAsk: ((UUID, UUID) -> Void)?
     @State private var tool = NotebookDrawingTool.pen
@@ -263,6 +283,7 @@ private struct NotebookEditorView: View {
     @State private var redoTrigger = 0
     @State private var pageTitle = ""
     @State private var titlePageID: UUID?
+    @State private var titleDirty = false
     @State private var settings = false
     @State private var assistant = false
     @State private var photo: PhotosPickerItem?
@@ -299,7 +320,7 @@ private struct NotebookEditorView: View {
             else { penWidth = value }
         })
     }
-    private var widthRange: ClosedRange<CGFloat> { tool == .highlighter ? 8...40 : tool == .vectorEraser || tool == .pixelEraser ? 8...50 : 1...12 }
+    private var widthRange: ClosedRange<CGFloat> { tool == .highlighter ? 8...60 : tool == .vectorEraser || tool == .pixelEraser ? 8...80 : 1...20 }
 
     var body: some View {
         GeometryReader { geometry in
@@ -332,7 +353,6 @@ private struct NotebookEditorView: View {
         }
         .navigationTitle(book?.title ?? "笔记本")
         .navigationBarTitleDisplayMode(.inline)
-        .accessibilityIdentifier("notebook-editor")
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
                 Menu {
@@ -362,6 +382,13 @@ private struct NotebookEditorView: View {
         }
         .onChange(of: pageTitleFocused) { _, focused in if !focused { finishTitleEditing() } }
         .onChange(of: book == nil) { _, missing in if missing { dismiss() } }
+        .onChange(of: automation.active) { _, active in if active { finishTitleEditing(); dismissKeyboard() } }
+        .onReceive(NotificationCenter.default.publisher(for: .notebookToolCommand)) { notification in
+            receiveToolCommand(notification)
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .notebookFlushDrawing)) { _ in
+            if titleDirty || pageTitleFocused { finishTitleEditing(); dismissKeyboard() }
+        }
         .photosPicker(isPresented: $photoImporter, selection: $photo, matching: .images)
         .onChange(of: photo) { _, selection in
             guard let selection, let pageID = page?.id else { return }
@@ -376,10 +403,10 @@ private struct NotebookEditorView: View {
                 SettingsView().toolbar {
                     ToolbarItem(placement: .confirmationAction) { Button("完成") { settings = false } }
                 }
-            }
+            }.aiInteractionLocked()
         }
         .sheet(isPresented: $assistant) {
-            if let page { NotebookAssistantView(notebookID: notebookID, pageID: page.id) }
+            if let page { NotebookAssistantView(notebookID: notebookID, pageID: page.id).aiInteractionLocked() }
         }
         .sheet(isPresented: $textEditor) {
             NotebookTextSheet(text: $textDraft, isNew: editingTextID == nil) {
@@ -387,7 +414,7 @@ private struct NotebookEditorView: View {
                 if let objectID = editingTextID { store.updateText(textDraft, pageID: pageID, objectID: objectID) }
                 else { _ = store.addText(textDraft, to: pageID) }
                 tool = .lasso
-            }.presentationDetents([.medium, .large]).presentationDragIndicator(.visible)
+            }.presentationDetents([.medium, .large]).presentationDragIndicator(.visible).aiInteractionLocked()
         }
         .alert("无法插入图片", isPresented: Binding(get: { importError != nil }, set: { if !$0 { importError = nil } })) {
             Button("知道了", role: .cancel) { importError = nil }
@@ -414,6 +441,20 @@ private struct NotebookEditorView: View {
             }.disabled(renamedPageTitle.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
         }
         .onDisappear { finishTitleEditing() }
+        .animation(reduced ? nil : .timingCurve(0.22, 1, 0.36, 1, duration: 0.42), value: railOverride)
+        .animation(reduced ? nil : .timingCurve(0.22, 1, 0.36, 1, duration: 0.3), value: tool)
+    }
+
+    private func receiveToolCommand(_ notification: Notification) {
+        guard let info = notification.userInfo, let pageID = info["pageID"] as? UUID, pageID == page?.id else { return }
+        if let raw = info["tool"] as? String, let value = NotebookDrawingTool(rawValue: raw) { tool = value }
+        if let hex = info["colorHex"] as? String { inkColor = notebookHexColor(hex) }
+        if let width = info["width"] as? Double, width.isFinite {
+            if tool == .highlighter { markerWidth = CGFloat(min(max(width, 8), 60)) }
+            else if tool == .vectorEraser || tool == .pixelEraser { eraserWidth = CGFloat(min(max(width, 8), 80)) }
+            else { penWidth = CGFloat(min(max(width, 1), 20)) }
+        }
+        if let enabled = info["allowsFingerDrawing"] as? Bool { fingerDrawing = enabled }
     }
 
     private func editorControls(expanded: Bool, compact: Bool) -> some View {
@@ -424,7 +465,7 @@ private struct NotebookEditorView: View {
                         .foregroundStyle(expanded ? Notebook.accent : Notebook.secondary)
                 }.accessibilityLabel(expanded ? "收起页面列表" : "展开页面列表")
                 if let page {
-                    TextField(pageDisplayTitle(page), text: $pageTitle)
+                    TextField(pageDisplayTitle(page), text: Binding(get: { pageTitle }, set: { value in pageTitle = value; titleDirty = true }))
                         .font(.subheadline.weight(.medium)).foregroundStyle(Notebook.ink)
                         .focused($pageTitleFocused).submitLabel(.done).onSubmit { finishTitleEditing(); pageTitleFocused = false }
                         .accessibilityLabel("页面名称").accessibilityIdentifier("page-title")
@@ -668,6 +709,8 @@ private struct NotebookEditorView: View {
     }
 
     private func finishTitleEditing() {
+        guard titleDirty else { return }
+        defer { titleDirty = false }
         guard let pageID = titlePageID,
               let original = book?.pages.first(where: { $0.id == pageID }), original.title != pageTitle else { return }
         let clean = pageTitle.trimmingCharacters(in: .whitespacesAndNewlines)

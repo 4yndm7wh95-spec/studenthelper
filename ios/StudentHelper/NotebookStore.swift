@@ -97,6 +97,8 @@ final class NotebookStore: ObservableObject {
     func renamePage(_ id: UUID, title: String) { _ = apply(.renamePage(pageID: id, title: title)) }
 
     func deleteNotebook(_ id: UUID) {
+        flushActiveCanvas()
+        finishUndoGroup()
         guard let book = notebook(id: id) else { return }
         guard retryPendingDrawings(pageIDs: Set(book.pages.map(\.id))) else { return }
         var next = library; next.notebooks.removeAll { $0.id == id }; normalizeSelection(&next)
@@ -119,6 +121,8 @@ final class NotebookStore: ObservableObject {
 
     /// Deleting the only page inserts a fresh page in the same atomic transaction.
     func deletePage(_ id: UUID) {
+        flushActiveCanvas()
+        finishUndoGroup()
         guard retryPendingDrawings(pageIDs: [id]) else { return }
         do {
             var next = library
@@ -167,10 +171,13 @@ final class NotebookStore: ObservableObject {
             var next = library; let (n, p) = try location(of: pageID, in: next)
             let asset = try repository.importImage(data, name: name)
             let page = next.notebooks[n].pages[p]
-            let naturalWidth = min(460, page.width - 128)
-            let proposed = frame ?? NoteRect(x: 64, y: 80, width: naturalWidth,
-                                             height: min(page.height - 160, naturalWidth * Double(asset.height) / Double(asset.width)))
-            let object = NoteObject(frame: try proposed.clamped(pageWidth: page.width, pageHeight: page.height), content: .image(asset))
+            let placedFrame: NoteRect
+            if let frame {
+                placedFrame = try frame.clamped(pageWidth: page.width, pageHeight: page.height)
+            } else {
+                placedFrame = defaultImageFrame(asset, page: page)
+            }
+            let object = NoteObject(frame: placedFrame, content: .image(asset))
             next.notebooks[n].pages[p].objects.append(object)
             touch(&next, notebook: n, page: p)
             return commit(next) ? object.id : nil
@@ -204,6 +211,7 @@ final class NotebookStore: ObservableObject {
             }
             let asset = try repository.saveDrawing(drawing, pageID: pageID)
             next.notebooks[n].pages[p].drawingAsset = asset
+            next.notebooks[n].pages[p].drawingChecksum = NoteRepository.checksum(drawing.dataRepresentation())
             touch(&next, notebook: n, page: p)
             if commit(next) { cache(drawing, key: asset); clearPendingDrawing(pageID); return true }
             retainPendingDrawing(drawing, pageID: pageID)
@@ -284,6 +292,9 @@ final class NotebookStore: ObservableObject {
     }
 
     func save() {
+        // A lasso/menu change may still be waiting for the canvas debounce.
+        // Save the live canvas before retrying drafts or writing the index.
+        flushActiveCanvas()
         guard retryPendingDrawings() else { return }
         do { try ensureWritable(); try repository.save(library); storageError = nil }
         catch { report(error) }
@@ -386,6 +397,9 @@ final class NotebookStore: ObservableObject {
         if undoHistory.count > 50 { undoHistory.removeFirst(undoHistory.count - 50) }
     }
     private func finishUndoGroup() { if groupDepth > 0 { groupDepth = 1; endUndoGroup() } }
+    private func flushActiveCanvas() {
+        NotificationCenter.default.post(name: .notebookFlushDrawing, object: nil)
+    }
     private func ensureWritable() throws { if isStorageReadOnly { throw NoteStorageError.readOnly } }
     private func report(_ error: Error) { storageError = error.localizedDescription }
     private func cache(_ drawing: PKDrawing, key: String) {
@@ -405,6 +419,21 @@ final class NotebookStore: ObservableObject {
     private func clearPendingDrawing(_ pageID: UUID) {
         pendingDrawings.removeValue(forKey: pageID)
         if pendingDrawingPageIDs.contains(pageID) { pendingDrawingPageIDs.remove(pageID) }
+    }
+    private func defaultImageFrame(_ asset: NoteImageAsset, page: NotePage) -> NoteRect {
+        let horizontalInset = min(64, page.width * 0.1)
+        let verticalInset = min(64, page.height * 0.1)
+        let maxWidth = min(640, page.width - 2 * horizontalInset)
+        let maxHeight = min(page.height * 0.35, page.height - 2 * verticalInset)
+        let scale = min(maxWidth / Double(asset.width), maxHeight / Double(asset.height))
+        let width = Double(asset.width) * scale
+        let height = Double(asset.height) * scale
+        let previousBottom = page.objects.filter { $0.image != nil }.map { $0.frame.y + $0.frame.height }.max()
+        let preferredY = previousBottom.map { $0 + 24 } ?? verticalInset
+        // A crowded page can still accept a picture within its bounds; the
+        // student can move it or make another page. The picture never stretches.
+        let y = min(max(verticalInset, preferredY), page.height - verticalInset - height)
+        return NoteRect(x: horizontalInset, y: y, width: width, height: height)
     }
     @discardableResult
     private func retryPendingDrawings(pageIDs: Set<UUID>? = nil) -> Bool {

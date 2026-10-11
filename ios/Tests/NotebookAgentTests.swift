@@ -23,7 +23,7 @@ final class NotebookAgentTests: XCTestCase {
         let body = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
         let tools = try XCTUnwrap(body["tools"] as? [[String: Any]])
         let names = tools.compactMap { ($0["function"] as? [String: Any])?["name"] as? String }
-        XCTAssertEqual(Set(names), ["list_pages", "read_page", "read_region", "search_notes", "propose_annotation", "propose_create_page", "propose_paper", "propose_move_object", "propose_delete_object"])
+        XCTAssertEqual(Set(names), ["list_pages", "read_page", "read_region", "search_notes", "propose_annotation", "propose_create_page", "propose_paper", "propose_move_object", "propose_delete_object", "read_app_state", "list_notebooks", "read_ink", "perform_app_action"])
         XCTAssertTrue(names.filter { $0.contains("delete") || $0.contains("move") }.allSatisfy { $0.hasPrefix("propose_") })
         XCTAssertEqual((body["messages"] as? [[String: String]])?.first?["content"], "查看这页")
     }
@@ -55,6 +55,13 @@ final class NotebookAgentTests: XCTestCase {
         XCTAssertTrue(store.page(id: page)?.objects.isEmpty == true)
         XCTAssertTrue(store.page(id: foreign)?.objects.isEmpty == true)
         let second = try XCTUnwrap(NotebookAgentProtocol.requests.last)
+        let first = try XCTUnwrap(NotebookAgentProtocol.requests.first)
+        let initialMessages = try XCTUnwrap(first["messages"] as? [[String: Any]])
+        let visualParts = initialMessages.compactMap { $0["content"] as? [[String: Any]] }.flatMap { $0 }
+        let imagePart = try XCTUnwrap(visualParts.first { $0["type"] as? String == "image_url" })
+        let source = try XCTUnwrap(imagePart["image_url"] as? [String: Any])
+        XCTAssertTrue((source["url"] as? String)?.hasPrefix("data:image/jpeg;base64,") == true, "The student should not need to separately enable a page image")
+        XCTAssertEqual(source["detail"] as? String, "high")
         let messages = try XCTUnwrap(second["messages"] as? [[String: Any]])
         let resultMessage = try XCTUnwrap(messages.first { ($0["tool_call_id"] as? String) == "foreign" })
         XCTAssertTrue((resultMessage["content"] as? String)?.contains("工具未执行") == true)

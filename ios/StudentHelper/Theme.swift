@@ -43,9 +43,9 @@ enum Notebook {
     }
 
     // 动效
-    static func message(_ reduced: Bool) -> Animation { reduced ? .linear(duration: 0.16) : .timingCurve(0.22, 1, 0.36, 1, duration: 0.32) }
-    static func unfold(_ reduced: Bool) -> Animation { reduced ? .linear(duration: 0.16) : .timingCurve(0.37, 0, 0.63, 1, duration: 0.24) }
-    static func scroll(_ reduced: Bool) -> Animation { reduced ? .linear(duration: 0.16) : .timingCurve(0.22, 1, 0.36, 1, duration: 0.30) }
+    static func message(_ reduced: Bool) -> Animation { reduced ? .easeInOut(duration: 0.16) : .timingCurve(0.22, 1, 0.36, 1, duration: 0.32) }
+    static func unfold(_ reduced: Bool) -> Animation { reduced ? .easeInOut(duration: 0.16) : .timingCurve(0.37, 0, 0.63, 1, duration: 0.32) }
+    static func scroll(_ reduced: Bool) -> Animation { reduced ? .easeInOut(duration: 0.16) : .timingCurve(0.22, 1, 0.36, 1, duration: 0.42) }
 }
 
 extension Color {
@@ -84,7 +84,7 @@ struct NotebookButton: ButtonStyle {
             .foregroundStyle(!enabled ? Notebook.disabledFg : primary ? Notebook.onAccent : Notebook.ink)
             .background(!enabled ? (primary ? Notebook.disabledBg : .clear) : primary ? (pressed ? Notebook.accentPress : Notebook.accent) : (pressed ? Notebook.sunk : Notebook.surface), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
             .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).stroke(primary ? .clear : (enabled ? Notebook.lineStrong : Notebook.line), lineWidth: 1))
-            .animation(.linear(duration: reduced ? 0.01 : 0.12), value: pressed)
+            .animation(reduced ? nil : .timingCurve(0.42, 0, 0.58, 1, duration: 0.2), value: pressed)
     }
 }
 
@@ -159,7 +159,7 @@ struct ThinkingRow: View {
             Spacer()
         }
         .opacity(visible ? 1 : 0).offset(y: visible || reduced ? 0 : 4)
-        .task { try? await Task.sleep(for: .milliseconds(300)); withAnimation(reduced ? .linear(duration: 0.2) : .timingCurve(0.22, 1, 0.36, 1, duration: 0.26)) { visible = true } }
+        .task { try? await Task.sleep(for: .milliseconds(300)); withAnimation(reduced ? .easeInOut(duration: 0.2) : .timingCurve(0.22, 1, 0.36, 1, duration: 0.4)) { visible = true } }
         .accessibilityElement(children: .ignore).accessibilityLabel("正在回复")
     }
 }

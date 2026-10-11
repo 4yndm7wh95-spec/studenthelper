@@ -73,6 +73,7 @@ struct NotePage: Identifiable, Codable, Equatable {
     var height: Double = 1086
     /// Immutable native PencilKit asset. Images and typed annotations stay independent.
     var drawingAsset: String?
+    var drawingChecksum: String?
     var objects: [NoteObject] = []
     var createdAt = Date()
     var updatedAt = Date()
