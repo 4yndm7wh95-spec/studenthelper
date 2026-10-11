@@ -32,6 +32,7 @@ jobs:
             -configuration Debug -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' \
             -derivedDataPath build/simulator CODE_SIGNING_ALLOWED=YES CODE_SIGN_IDENTITY=- build | tee simulator-build.log
       - name: Test notebook and capture iPad simulator
+        timeout-minutes: 12
         working-directory: ios
         run: bash ci/capture-ipad.sh
       - name: Compile for physical iPad

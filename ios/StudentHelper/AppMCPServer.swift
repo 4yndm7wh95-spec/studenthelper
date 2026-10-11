@@ -279,7 +279,14 @@ final class AppMCPServer: ObservableObject {
             let operationID = UUID()
             activeOperation = Operation(id: operationID, requestKey: Self.requestKey(object["id"]!)!, clientID: clientID, sessionID: sessionID)
             let learning = self.learning
-            let visibleDuration = minimumVisibleNanoseconds
+            var visibleDuration = minimumVisibleNanoseconds
+            #if DEBUG
+            if minimumVisibleNanoseconds > 400_000_000 {
+                // Give the UI capture time to press Stop without slowing every setup action.
+                let toolName = (object["params"] as? [String: Any])?["name"] as? String
+                visibleDuration = toolName == "read_page" ? 10_000_000_000 : 400_000_000
+            }
+            #endif
             let work = Task { @MainActor [weak self] in
                 defer {
                     automation.end(sessionID)
