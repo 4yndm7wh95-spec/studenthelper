@@ -123,7 +123,10 @@ import UIKit
         _ = try await rpc(endpoint, token: token, id: 4, method: "tools/call", params: ["name": "perform_app_action", "arguments": ["action": "draw_stroke", "parameters": ["page_id": pageID, "points": points, "width": 2, "color": "#B45C45"]]])
         let canvas = app.descendants(matching: .any).matching(identifier: "notebook-canvas").firstMatch
         XCTAssertTrue(canvas.waitForExistence(timeout: 6)); waitForInk(canvas, contains: "图片1张"); waitForInk(canvas, contains: "手写1笔")
-        let request = Task { try? await self.rpc(endpoint, token: token, id: 5, method: "tools/call", params: ["name": "read_page", "arguments": ["page_id": pageID]]) }
+        _ = try await rpc(endpoint, token: token, id: 5, method: "tools/call", params: ["name": "perform_app_action", "arguments": ["action": "zoom_viewport", "parameters": ["page_id": pageID, "zoom": 1.25]]])
+        _ = try await rpc(endpoint, token: token, id: 6, method: "tools/call", params: ["name": "perform_app_action", "arguments": ["action": "scroll_viewport", "parameters": ["page_id": pageID, "dy": 60]]])
+        _ = try await rpc(endpoint, token: token, id: 7, method: "tools/call", params: ["name": "perform_app_action", "arguments": ["action": "zoom_viewport", "parameters": ["page_id": pageID, "zoom": 1, "x": 0, "y": 0]]])
+        let request = Task { try? await self.rpc(endpoint, token: token, id: 8, method: "tools/call", params: ["name": "read_page", "arguments": ["page_id": pageID]]) }
         let stop = app.buttons["ai-stop"]
         XCTAssertTrue(stop.waitForExistence(timeout: 5))
         capture(app, "iPadAIReviewAndControl")
