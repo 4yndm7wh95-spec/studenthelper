@@ -108,7 +108,7 @@ struct ChatView: View {
 
     private func follow(_ proxy: ScrollViewProxy, animated: Bool, fresh: Bool) {
         if stick { if animated { withAnimation(Notebook.scroll(reduced)) { proxy.scrollTo("bottom", anchor: .bottom) } } else { proxy.scrollTo("bottom", anchor: .bottom) } }
-        else if fresh { withAnimation(.linear(duration: 0.16)) { showNewReply = true } }
+        else if fresh { withAnimation(.easeInOut(duration: 0.24)) { showNewReply = true } }
     }
 
     private var composer: some View {
@@ -141,7 +141,7 @@ struct ChatView: View {
                 .background(Notebook.surface, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
                 .overlay(RoundedRectangle(cornerRadius: 22, style: .continuous).stroke(inputFocused ? Notebook.accent : Notebook.lineStrong, lineWidth: 0.5))
                 .shadow(color: Color.black.opacity(0.04), radius: 8, y: 2)
-                .animation(.linear(duration: 0.16), value: inputFocused)
+                .animation(.timingCurve(0.42, 0, 0.58, 1, duration: 0.24), value: inputFocused)
         }.padding(.horizontal, 12).padding(.top, 8).padding(.bottom, 8).background(Notebook.paper)
     }
 
@@ -165,6 +165,6 @@ struct ChatView: View {
         }
         .buttonStyle(.plain).disabled(disabled)
         .accessibilityLabel(mode == .stop ? "停止回复" : mode == .skip ? "跳过等待" : "发送")
-        .animation(.linear(duration: reduced ? 0.01 : 0.12), value: mode == .stop)
+        .animation(reduced ? nil : .timingCurve(0.42, 0, 0.58, 1, duration: 0.24), value: mode == .stop)
     }
 }

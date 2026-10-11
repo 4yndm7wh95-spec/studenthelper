@@ -322,7 +322,7 @@ private struct NotebookEditorView: View {
     }
     private var widthRange: ClosedRange<CGFloat> { tool == .highlighter ? 8...60 : tool == .vectorEraser || tool == .pixelEraser ? 8...80 : 1...20 }
 
-    var body: some View {
+    private var editorSurface: some View {
         GeometryReader { geometry in
             let expanded = railOverride ?? (geometry.size.width >= 700)
             let sideRail = geometry.size.width >= 900
@@ -351,6 +351,10 @@ private struct NotebookEditorView: View {
             }
             .background(Notebook.paper)
         }
+    }
+
+    private var editorNavigation: some View {
+        editorSurface
         .navigationTitle(book?.title ?? "笔记本")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
@@ -389,6 +393,10 @@ private struct NotebookEditorView: View {
         .onReceive(NotificationCenter.default.publisher(for: .notebookFlushDrawing)) { _ in
             if titleDirty || pageTitleFocused { finishTitleEditing(); dismissKeyboard() }
         }
+    }
+
+    private var editorPresentation: some View {
+        editorNavigation
         .photosPicker(isPresented: $photoImporter, selection: $photo, matching: .images)
         .onChange(of: photo) { _, selection in
             guard let selection, let pageID = page?.id else { return }
@@ -416,6 +424,10 @@ private struct NotebookEditorView: View {
                 tool = .lasso
             }.presentationDetents([.medium, .large]).presentationDragIndicator(.visible).aiInteractionLocked()
         }
+    }
+
+    var body: some View {
+        editorPresentation
         .alert("无法插入图片", isPresented: Binding(get: { importError != nil }, set: { if !$0 { importError = nil } })) {
             Button("知道了", role: .cancel) { importError = nil }
         } message: { Text(importError ?? "") }
