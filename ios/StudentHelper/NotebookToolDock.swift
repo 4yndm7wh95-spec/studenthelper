@@ -42,6 +42,7 @@ struct NotebookToolDock<Content: View>: View {
             .animation(curve, value: dragging)
             .animation(curve, value: edge)
             .animation(curve, value: fraction)
+            .accessibilityElement(children: .contain)
             .accessibilityIdentifier("notebook-tool-dock")
             .accessibilityValue(dragging ? "移动中" : edge)
         }.coordinateSpace(name: "notebook-dock-space")
