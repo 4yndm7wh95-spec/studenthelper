@@ -107,7 +107,7 @@ struct ModelContentPart: Codable {
 }
 
 enum ModelConnectionError: LocalizedError {
-    case address, model, key, keychain(OSStatus), status(Int), response, empty
+    case address, model, key, keychain(OSStatus), status(Int), response, empty, teachingReply
     var errorDescription: String? {
         switch self {
         case .address: return "接口地址需要以 https:// 开头。"
@@ -121,6 +121,7 @@ enum ModelConnectionError: LocalizedError {
         case .status: return "模型服务暂时无法回复，请稍后再试。"
         case .response: return "接口返回格式不兼容，请检查模型设置。"
         case .empty: return "模型没有返回文字，请重试。"
+        case .teachingReply: return "这次回复没有整理好，请重试。"
         }
     }
 }
@@ -135,34 +136,93 @@ struct ModelClient {
         guard !clean.isEmpty, !clean.contains(where: { $0.isWhitespace || $0.isNewline }) else { throw ModelConnectionError.key }
         return clean
     }
-    static func request(configuration: ModelConfiguration, key: String, messages: [ModelMessage], maxTokens: Int = 1400) throws -> URLRequest {
+    private static func usesTeachingProtocol(configuration: ModelConfiguration, messages: [ModelMessage]) -> Bool {
+        guard configuration.endpoint?.host == "api.deepseek.com",
+              configuration.model.trimmingCharacters(in: .whitespacesAndNewlines) == TeachingInstructions.model else { return false }
+        return messages.contains { message in
+            guard message.role == "system", case .text(let text) = message.content else { return false }
+            return text.contains(TeachingInstructions.base)
+        }
+    }
+
+    static func request(configuration: ModelConfiguration, key: String, messages: [ModelMessage], maxTokens: Int? = nil) throws -> URLRequest {
+        try request(configuration: configuration, key: key, messages: messages, maxTokens: maxTokens, retry: false)
+    }
+
+    private static func request(configuration: ModelConfiguration, key: String, messages: [ModelMessage], maxTokens: Int?, retry: Bool) throws -> URLRequest {
         guard let endpoint = configuration.endpoint else { throw ModelConnectionError.address }
         let model = configuration.model.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !model.isEmpty else { throw ModelConnectionError.model }
         let cleanKey = try validatedKey(key)
+        let teaching = usesTeachingProtocol(configuration: configuration, messages: messages)
+        let prepared = teaching ? messages.map { message -> ModelMessage in
+            guard message.role == "system", case .text(let text) = message.content,
+                  text.contains(TeachingInstructions.base) else { return message }
+            var content = TeachingInstructions.contract + "\n\n" + text + "\n\n" + TeachingInstructions.outputInstruction
+            if retry { content += "\n\n" + TeachingInstructions.retry }
+            return ModelMessage(role: message.role, content: content)
+        } : messages
+        let budget = maxTokens ?? (teaching ? TeachingInstructions.maxTokens : 1400)
         var request = URLRequest(url: endpoint, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 95)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.setValue("Bearer " + cleanKey, forHTTPHeaderField: "Authorization")
-        let wireMessages = try JSONSerialization.jsonObject(with: JSONEncoder().encode(messages))
-        var body: [String: Any] = ["model": model, "messages": wireMessages, "max_tokens": maxTokens, "stream": false]
-        if endpoint.host == "api.deepseek.com" { body["thinking"] = ["type": "disabled"] }
+        let wireMessages = try JSONSerialization.jsonObject(with: JSONEncoder().encode(prepared))
+        var body: [String: Any] = ["model": model, "messages": wireMessages,
+                                 "max_tokens": teaching && retry ? max(budget, TeachingInstructions.maxTokens) : budget,
+                                 "stream": false]
+        if teaching {
+            body["thinking"] = ["type": TeachingInstructions.thinkingType]
+            body["reasoning_effort"] = TeachingInstructions.reasoningEffort
+            body["response_format"] = ["type": TeachingInstructions.responseFormatType]
+        } else if endpoint.host == "api.deepseek.com" { body["thinking"] = ["type": "disabled"] }
         request.httpBody = try JSONSerialization.data(withJSONObject: body)
         return request
     }
-    static func complete(configuration: ModelConfiguration, key: String, messages: [ModelMessage], maxTokens: Int = 1400, session: URLSession = .shared) async throws -> String {
-        let request = try request(configuration: configuration, key: key, messages: messages, maxTokens: maxTokens)
-        let (data, response) = try await session.data(for: request)
-        guard let http = response as? HTTPURLResponse else { throw ModelConnectionError.response }
-        guard (200..<300).contains(http.statusCode) else { throw ModelConnectionError.status(http.statusCode) }
-        guard let result = try? JSONDecoder().decode(Completion.self, from: data) else { throw ModelConnectionError.response }
-        let text = result.choices.first?.message.content?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        guard !text.isEmpty else { throw ModelConnectionError.empty }
-        return text
+    static func complete(configuration: ModelConfiguration, key: String, messages: [ModelMessage], maxTokens: Int? = nil, session: URLSession = .shared) async throws -> String {
+        let teaching = usesTeachingProtocol(configuration: configuration, messages: messages)
+        for attempt in 0...(teaching ? 1 : 0) {
+            let request = try request(configuration: configuration, key: key, messages: messages, maxTokens: maxTokens, retry: attempt > 0)
+            let (data, response) = try await session.data(for: request)
+            guard let http = response as? HTTPURLResponse else { throw ModelConnectionError.response }
+            guard (200..<300).contains(http.statusCode) else { throw ModelConnectionError.status(http.statusCode) }
+            guard let result = try? JSONDecoder().decode(Completion.self, from: data) else { throw ModelConnectionError.response }
+            let choice = result.choices.first
+            let text = choice?.message.content?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            if teaching {
+                if choice?.finishReason != "length", let answer = try? TeachingReply.decode(text) { return answer }
+                if attempt == 0 { continue }
+                throw ModelConnectionError.teachingReply
+            }
+            guard choice?.message.invalidContent != true else { throw ModelConnectionError.response }
+            guard !text.isEmpty else { throw ModelConnectionError.empty }
+            return text
+        }
+        throw ModelConnectionError.teachingReply
     }
     private struct Completion: Decodable {
         let choices: [Choice]
-        struct Choice: Decodable { let message: Message }
-        struct Message: Decodable { let content: String? }
+        struct Choice: Decodable {
+            let message: Message
+            let finishReason: String?
+            enum CodingKeys: String, CodingKey { case message; case finishReason = "finish_reason" }
+        }
+        struct Message: Decodable {
+            let content: String?
+            let invalidContent: Bool
+            enum CodingKeys: String, CodingKey { case content }
+            init(from decoder: Decoder) throws {
+                let container = try decoder.container(keyedBy: CodingKeys.self)
+                if !container.contains(.content) {
+                    content = nil; invalidContent = false
+                } else if try container.decodeNil(forKey: .content) {
+                    content = nil; invalidContent = false
+                } else if let text = try? container.decode(String.self, forKey: .content) {
+                    content = text; invalidContent = false
+                } else {
+                    content = nil; invalidContent = true
+                }
+            }
+        }
     }
 }
