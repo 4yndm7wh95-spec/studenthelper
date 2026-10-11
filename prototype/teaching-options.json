@@ -1,0 +1,7 @@
+{
+  "model": "deepseek-flash",
+  "thinking": { "type": "enabled" },
+  "reasoning_effort": "low",
+  "max_tokens": 8192,
+  "response_format": { "type": "text" }
+}
