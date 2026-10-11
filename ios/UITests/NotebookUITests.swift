@@ -107,8 +107,10 @@ import UIKit
         XCTAssertEqual(XCTWaiter.wait(for: [enabled], timeout: 8), .completed)
         let address = app.descendants(matching: .any).matching(identifier: "mcp-endpoint").firstMatch
         XCTAssertTrue(address.waitForExistence(timeout: 8))
-        let raw = ((address.value as? String) ?? address.label).replacingOccurrences(of: "连接地址：", with: "")
-        var url = try XCTUnwrap(URLComponents(string: raw)); url.host = "127.0.0.1"
+        let raw = address.label.replacingOccurrences(of: "连接地址：", with: "")
+        var url = try XCTUnwrap(URLComponents(string: raw))
+        XCTAssertEqual(url.scheme, "http"); XCTAssertNotNil(url.port)
+        url.host = "127.0.0.1"
         let endpoint = try XCTUnwrap(url.url)
         app.buttons["完成"].firstMatch.tap()
         _ = try await rpc(endpoint, token: token, id: 1, method: "initialize", params: ["protocolVersion": "2025-06-18", "capabilities": [:], "clientInfo": ["name": "iPad UI review", "version": "1"]])
@@ -132,7 +134,7 @@ import UIKit
         _ = try await rpc(endpoint, token: token, id: 6, method: "tools/call", params: ["name": "perform_app_action", "arguments": ["action": "scroll_viewport", "parameters": ["page_id": pageID, "dy": 60]]])
         _ = try await rpc(endpoint, token: token, id: 7, method: "tools/call", params: ["name": "perform_app_action", "arguments": ["action": "zoom_viewport", "parameters": ["page_id": pageID, "zoom": 1, "x": 0, "y": 0]]])
         let request = Task { try? await self.rpc(endpoint, token: token, id: 8, method: "tools/call", params: ["name": "read_page", "arguments": ["page_id": pageID]]) }
-        await Task.yield()
+        try await Task.sleep(for: .milliseconds(100))
         let stop = app.buttons["ai-stop"]
         XCTAssertTrue(stop.waitForExistence(timeout: 5))
         capture(app, "iPadAIReviewAndControl")
