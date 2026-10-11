@@ -21,6 +21,7 @@ final class NotebookAgentTests: XCTestCase {
         let data = try XCTUnwrap(request.httpBody)
         XCTAssertFalse(String(decoding: data, as: UTF8.self).contains("test-key"))
         let body = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
+        XCTAssertNil(body["response_format"], "Notebook tool calls must retain their own wire format after teaching prompt updates")
         let tools = try XCTUnwrap(body["tools"] as? [[String: Any]])
         let names = tools.compactMap { ($0["function"] as? [String: Any])?["name"] as? String }
         XCTAssertEqual(Set(names), ["list_pages", "read_page", "read_region", "search_notes", "propose_annotation", "propose_create_page", "propose_paper", "propose_move_object", "propose_delete_object", "read_app_state", "list_notebooks", "read_ink", "perform_app_action", "list_notebook_pages", "read_notebook_page", "search_notebook"])
@@ -58,6 +59,7 @@ final class NotebookAgentTests: XCTestCase {
         let second = try XCTUnwrap(NotebookAgentProtocol.requests.last)
         let first = try XCTUnwrap(NotebookAgentProtocol.requests.first)
         let initialMessages = try XCTUnwrap(first["messages"] as? [[String: Any]])
+        XCTAssertTrue((initialMessages.first?["content"] as? String)?.contains(TeachingInstructions.base) == true)
         let visualParts = initialMessages.compactMap { $0["content"] as? [[String: Any]] }.flatMap { $0 }
         let imagePart = try XCTUnwrap(visualParts.first { $0["type"] as? String == "image_url" })
         let source = try XCTUnwrap(imagePart["image_url"] as? [String: Any])

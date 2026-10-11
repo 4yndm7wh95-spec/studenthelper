@@ -128,6 +128,9 @@ final class NotebookAssistantModel: ObservableObject {
         try await mcp.initialize()
         let initial = try await read(pageID, region: region, store: store)
         let prompt = """
+        \(TeachingInstructions.base)
+
+        以下为笔记本场景的操作规则：
         你是“一步”的笔记助手。学生用 Apple Pencil 记大学作业笔记，希望从题目里学会做题。
         默认只解决当前一个疑问，用学生能理解的短句；明确要求整理整页时可完整整理。
         当前笔记本ID：\(notebookID)，当前页面ID：\(pageID)。默认围绕这本笔记检查，跨笔记本与其他功能仅在用户要求时操作。

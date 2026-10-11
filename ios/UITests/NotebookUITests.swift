@@ -66,7 +66,9 @@ import UIKit
         XCTAssertTrue(app.buttons["paper-menu"].waitForExistence(timeout: 5))
         XCTAssertTrue(app.buttons["paper-menu"].label.contains("点阵"))
         XCUIDevice.shared.orientation = .landscapeLeft
-        XCTAssertTrue(app.buttons["ask-notebook"].waitForExistence(timeout: 5))
+        let landscape = NSPredicate { _, _ in app.frame.width > app.frame.height && app.buttons["ask-notebook"].isHittable }
+        XCTAssertEqual(XCTWaiter.wait(for: [XCTNSPredicateExpectation(predicate: landscape, object: nil)], timeout: 8), .completed)
+        RunLoop.current.run(until: Date().addingTimeInterval(1))
         capture(app, "iPadNotebookLandscape")
         XCUIDevice.shared.orientation = .portrait
     }
