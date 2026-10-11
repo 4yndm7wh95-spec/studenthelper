@@ -31,7 +31,7 @@ for source in sorted(list((root / 'StudentHelper').glob('*.swift')) + list((root
 project = yaml.safe_load((root / 'project.yml').read_text(encoding='utf-8-sig'))
 assert project['targets']['StudentHelper']['platform'] == 'iOS'
 assert project['options']['deploymentTarget']['iOS'] == '17.0'
-assert project['settings']['base']['TARGETED_DEVICE_FAMILY'] == '1,2'
+assert project['settings']['base']['TARGETED_DEVICE_FAMILY'] == '2'
 with (root / 'StudentHelper' / 'Info.plist').open('rb') as file:
     info = plistlib.load(file)
 assert info['NSAppTransportSecurity']['NSAllowsLocalNetworking'] is True
@@ -47,6 +47,6 @@ for item in manifest['images']:
     with Image.open(assets / item['filename']) as image:
         assert image.size == (1024, 1024)
 print('RESOURCE OK: XcodeGen specification, Info.plist, local network exceptions, AppIcon')
-print('NOT VERIFIED: Swift type checking, Xcode build, simulator or physical iPhone')
+print('NOT VERIFIED: Swift type checking, Xcode build, simulator or physical iPad')
 if failed:
     raise SystemExit(1)

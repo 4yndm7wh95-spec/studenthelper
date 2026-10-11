@@ -299,6 +299,7 @@ struct NotebookAssistantView: View {
     @StateObject private var model: NotebookAssistantModel
     @State private var settings = false
     @State private var selectingRegion = false
+    @State private var information = false
     @State private var pageImage: UIImage?
     private let pageID: UUID
     init(notebookID: UUID, pageID: UUID) {
@@ -309,48 +310,76 @@ struct NotebookAssistantView: View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 20) {
-                    Text("从这页笔记开始").heading()
-                    Text("先在本机识别文字，提问时发送给你设置的模型。手写公式可能识别不全。").font(.footnote).foregroundStyle(Notebook.tertiary)
-                    Toggle("只问框选内容", isOn: $selectingRegion).font(.subheadline).disabled(model.busy)
-                        .onChange(of: selectingRegion) { _, enabled in if !enabled { model.selectedRegion = nil } }
+                    scopeControls
                     if selectingRegion, let pageImage {
                         NotebookRegionPicker(image: pageImage, region: $model.selectedRegion).frame(height: 300).disabled(model.busy)
-                        Text(model.selectedRegion == nil ? "在纸上拖动，框住要问的内容。" : "已框选；可以重新拖动调整范围。").font(.caption).foregroundStyle(Notebook.tertiary)
                     }
                     TextField("这一步为什么错了？", text: $model.question, axis: .vertical)
                         .lineLimit(2...5).reading().padding(14).background(Notebook.surface, in: RoundedRectangle(cornerRadius: 12))
                         .accessibilityIdentifier("notebook-question")
-                    Toggle("附上页面图片", isOn: $model.attachPageImage).font(.subheadline)
-                    Text("发送图片需要支持图片的模型；助手可按需读取这本笔记本的其他页面。").font(.caption).foregroundStyle(Notebook.tertiary)
                     HStack {
-                        Button(model.busy ? "正在查看…" : "问一步") { model.ask(store: store) }.buttonStyle(NotebookButton()).disabled(model.busy || model.question.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || (selectingRegion && model.selectedRegion == nil))
-                        if model.busy { Button("停止") { model.cancel() }.buttonStyle(NotebookButton(primary: false)) }
+                        Button { model.ask(store: store) } label: {
+                            Image(systemName: "arrow.up").font(.headline).frame(width: 44, height: 44)
+                                .foregroundStyle(Notebook.onAccent).background(Notebook.accent, in: Circle())
+                        }.buttonStyle(.plain).accessibilityLabel(model.busy ? "正在查看" : "问一步")
+                            .disabled(model.busy || model.question.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || (selectingRegion && model.selectedRegion == nil))
+                        if model.busy {
+                            Button { model.cancel() } label: { Image(systemName: "stop.fill").frame(width: 44, height: 44) }.accessibilityLabel("停止")
+                            ProgressView().accessibilityLabel(model.progress)
+                        }
                         Spacer()
                     }
-                    if model.busy { ProgressView(model.progress).font(.footnote) }
                     if let error = model.error { Text(error).font(.subheadline).foregroundStyle(Notebook.danger) }
                     if !model.answer.isEmpty { MathMessageBody(text: model.answer, cards: false).frame(maxWidth: .infinity, alignment: .leading) }
                     if !model.proposals.isEmpty {
                         VStack(alignment: .leading, spacing: 12) {
-                            Text("建议的修改").font(.headline)
+                            Image(systemName: "pencil.and.outline").foregroundStyle(Notebook.accent).accessibilityLabel("建议的修改")
                             ForEach(model.proposals) { Text($0.description).font(.subheadline) }
                             Button("应用修改") { model.apply(store: store) }.buttonStyle(NotebookButton())
-                            Text("原始笔迹会保留；应用后可在编辑器里撤销。").font(.caption).foregroundStyle(Notebook.tertiary)
                         }.notebookCard()
                     }
-                    if model.applied { Text("修改已保存").foregroundStyle(Notebook.accent) }
+                    if model.applied { Image(systemName: "checkmark.circle").foregroundStyle(Notebook.accent).accessibilityLabel("修改已保存") }
                 }.padding(24).frame(maxWidth: 620, alignment: .leading).frame(maxWidth: .infinity)
             }.scrollDismissesKeyboard(.interactively).background(Notebook.paper)
             .navigationTitle("笔记助手").navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .cancellationAction) { Button("关闭") { model.cancel(); dismiss() } }
-                ToolbarItem(placement: .topBarTrailing) { Button { settings = true } label: { Label("模型设置", systemImage: "gearshape") } }
+                ToolbarItem(placement: .cancellationAction) { Button { model.cancel(); dismiss() } label: { Image(systemName: "xmark").frame(width: 44, height: 44) }.accessibilityLabel("关闭") }
+                ToolbarItem(placement: .topBarTrailing) { Button { settings = true } label: { Image(systemName: "gearshape").frame(width: 44, height: 44) }.accessibilityLabel("模型设置") }
             }
             .sheet(isPresented: $settings) { NavigationStack { SettingsView().toolbar { ToolbarItem(placement: .confirmationAction) { Button("完成") { settings = false } } } } }
         }.task {
             NotificationCenter.default.post(name: .notebookFlushDrawing, object: nil)
             if let page = store.page(id: pageID) { pageImage = try? NotebookPageRenderer.checkedImage(page: page, store: store) }
         }.onDisappear { model.cancel() }
+    }
+    private var scopeControls: some View {
+        HStack(spacing: 12) {
+            if let pageImage {
+                Image(uiImage: pageImage).resizable().scaledToFit().frame(width: 48, height: 68)
+                    .overlay(RoundedRectangle(cornerRadius: 3).stroke(Notebook.line, lineWidth: 1)).accessibilityLabel("当前页")
+            }
+            Spacer()
+            scopeButton("crop", selected: selectingRegion, label: "框选内容") {
+                selectingRegion.toggle(); if !selectingRegion { model.selectedRegion = nil }
+            }
+            scopeButton("photo", selected: model.attachPageImage, label: "附上页面图片") { model.attachPageImage.toggle() }
+            Button { information = true } label: { Image(systemName: "info.circle").frame(width: 44, height: 44) }
+                .foregroundStyle(Notebook.tertiary).accessibilityLabel("读取范围与图片说明")
+                .popover(isPresented: $information) {
+                    VStack(alignment: .leading, spacing: 14) {
+                        Text("提问时发送本机识别文字和页面资料，助手可按需读取这本笔记本。手写公式可能识别不全。")
+                        Text("图片按钮选中时附上页面图片，需要支持图片的模型。")
+                    }.font(.footnote).foregroundStyle(Notebook.secondary).padding(22).frame(width: 280)
+                        .presentationCompactAdaptation(.popover)
+                }
+        }.disabled(model.busy)
+    }
+    private func scopeButton(_ symbol: String, selected: Bool, label: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Image(systemName: symbol).font(.system(size: 20)).frame(width: 44, height: 44)
+                .foregroundStyle(selected ? Notebook.accent : Notebook.secondary)
+                .background(selected ? Notebook.soft : .clear, in: RoundedRectangle(cornerRadius: 10))
+        }.buttonStyle(.plain).accessibilityLabel(label).accessibilityAddTraits(selected ? .isSelected : [])
     }
 }
 

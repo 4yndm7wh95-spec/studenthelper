@@ -17,13 +17,16 @@ trap 'xcrun simctl shutdown "$DEVICE" >/dev/null 2>&1 || true' EXIT
 xcrun simctl boot "$DEVICE"
 xcrun simctl bootstatus "$DEVICE" -b
 xcrun simctl status_bar "$DEVICE" override --time '9:41' --dataNetwork wifi --wifiMode active --wifiBars 3 --batteryState charged --batteryLevel 100
-xcodebuild -project StudentHelper.xcodeproj -scheme StudentHelper -configuration Debug \
+if ! xcodebuild -project StudentHelper.xcodeproj -scheme StudentHelper -configuration Debug \
   -destination "platform=iOS Simulator,id=$DEVICE" -derivedDataPath build/simulator \
   -parallel-testing-enabled NO -resultBundlePath build/ipad/notebook-tests.xcresult \
-  -only-testing:StudentHelperTests/NotebookTests -only-testing:StudentHelperTests/NotebookAgentTests \
+  -only-testing:StudentHelperTests \
   -only-testing:StudentHelperUITests/NotebookUITests \
   -test-timeouts-enabled YES -maximum-test-execution-time-allowance 90 \
-  CODE_SIGNING_ALLOWED=YES CODE_SIGN_IDENTITY=- test | tee ipad-tests.log
+  CODE_SIGNING_ALLOWED=YES CODE_SIGN_IDENTITY=- test | tee ipad-tests.log; then
+  xcrun xcresulttool export attachments --path build/ipad/notebook-tests.xcresult --output-path build/ipad/previews || true
+  exit 1
+fi
 xcrun xcresulttool export attachments --path build/ipad/notebook-tests.xcresult --output-path build/ipad/previews
 APP=build/simulator/Build/Products/Debug-iphonesimulator/StudentHelper.app
 xcrun simctl install "$DEVICE" "$APP"

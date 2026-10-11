@@ -5,6 +5,10 @@ final class NotebookUITests: XCTestCase {
         continueAfterFailure = false
         XCUIDevice.shared.orientation = .portrait
     }
+    override func tearDownWithError() throws {
+        if testRun?.hasSucceeded == false, XCUIApplication().state != .notRunning { capture(XCUIApplication(), "iPadFailure") }
+        XCUIDevice.shared.orientation = .portrait
+    }
     private func application() -> XCUIApplication {
         let app = XCUIApplication()
         app.launchArguments = ["--notebook-test-id", UUID().uuidString]
@@ -57,5 +61,26 @@ final class NotebookUITests: XCTestCase {
         XCTAssertTrue(app.buttons["ask-notebook"].waitForExistence(timeout: 5))
         capture(app, "iPadNotebookLandscape")
         XCUIDevice.shared.orientation = .portrait
+    }
+    func testFingerInkUndoRedoAndRestartPreserveNativeDrawing() {
+        let app = application(); create(app, title: "Ink")
+        app.buttons["笔记本选项"].tap(); app.buttons["用手指书写"].tap()
+        let canvas = app.descendants(matching: .any).matching(identifier: "notebook-canvas").firstMatch
+        XCTAssertTrue(canvas.waitForExistence(timeout: 5))
+        let from = canvas.coordinate(withNormalizedOffset: CGVector(dx: 0.3, dy: 0.35))
+        let to = canvas.coordinate(withNormalizedOffset: CGVector(dx: 0.65, dy: 0.42))
+        from.press(forDuration: 0.05, thenDragTo: to)
+        waitForInk(canvas, contains: "手写1笔")
+        app.buttons["撤销"].tap(); waitForInk(canvas, contains: "手写0笔")
+        app.buttons["重做"].tap(); waitForInk(canvas, contains: "手写1笔")
+        capture(app, "iPadNativeInk")
+        app.terminate(); app.launch()
+        let book = app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", "打开笔记本：Ink")).firstMatch
+        XCTAssertTrue(book.waitForExistence(timeout: 8)); book.tap()
+        XCTAssertTrue(canvas.waitForExistence(timeout: 5)); waitForInk(canvas, contains: "手写1笔")
+    }
+    private func waitForInk(_ canvas: XCUIElement, contains value: String) {
+        let saved = XCTNSPredicateExpectation(predicate: NSPredicate(format: "value CONTAINS %@", value), object: canvas)
+        XCTAssertEqual(XCTWaiter.wait(for: [saved], timeout: 8), .completed)
     }
 }

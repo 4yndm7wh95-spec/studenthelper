@@ -1,4 +1,4 @@
-name: Build iOS IPA
+name: Build iPad IPA
 on:
   workflow_dispatch:
   push:
@@ -31,13 +31,10 @@ jobs:
           xcodebuild -project StudentHelper.xcodeproj -scheme StudentHelper \
             -configuration Debug -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' \
             -derivedDataPath build/simulator CODE_SIGNING_ALLOWED=YES CODE_SIGN_IDENTITY=- build | tee simulator-build.log
-      - name: Test model connection and capture iPhone simulator
-        working-directory: ios
-        run: bash ci/capture-simulator.sh
       - name: Test notebook and capture iPad simulator
         working-directory: ios
         run: bash ci/capture-ipad.sh
-      - name: Compile for physical iPhone and iPad
+      - name: Compile for physical iPad
         working-directory: ios
         run: |
           set -o pipefail
@@ -55,22 +52,15 @@ jobs:
           shasum -a 256 build/StudentHelper-unsigned.ipa > build/SHA256.txt
           printf 'Commit: %s\nSigning: unsigned; requires sideload signing\n' "$GITHUB_SHA" > build/BUILD-INFO.txt
           xcodebuild -version >> build/BUILD-INFO.txt
-          printf '## IPA ready\n\nUnsigned universal iPhone and iPad IPA. Sign with your sideloading tool before installation.\n' >> "$GITHUB_STEP_SUMMARY"
+          printf '## IPA ready\n\nUnsigned iPad IPA. Sign with your sideloading tool before installation.\n' >> "$GITHUB_STEP_SUMMARY"
       - name: Upload IPA and preview
         uses: actions/upload-artifact@v4
         with:
-          name: StudentHelper-iPhone-iPad-unsigned
+          name: StudentHelper-iPad-unsigned
           path: |
             ios/build/StudentHelper-unsigned.ipa
             ios/build/SHA256.txt
             ios/build/BUILD-INFO.txt
-            ios/build/iphone16pro.png
-            ios/build/iphone-model-settings.png
-            ios/build/iphone-claude-light.png
-            ios/build/iphone-claude-dark.png
-            ios/build/ios-vision-request.json
-            ios/build/ui-previews/
-            ios/model-tests.log
             ios/ipad-tests.log
             ios/build/ipad/
           if-no-files-found: error
@@ -82,10 +72,7 @@ jobs:
           name: build-diagnostics
           path: |
             ios/*-build.log
-            ios/model-tests.log
             ios/ipad-tests.log
             ios/build/ipad/
-            ios/build/model-tests.xcresult/
-            ios/build/ui-previews/
           if-no-files-found: ignore
           retention-days: 7

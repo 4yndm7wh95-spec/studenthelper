@@ -30,10 +30,8 @@ struct NotebooksView: View {
                     if store.notebooks.isEmpty && !store.isStorageReadOnly {
                         emptyShelf
                     } else if visibleBooks.isEmpty {
-                        EmptyNotebook(symbol: "magnifyingglass", title: "没有找到这本笔记", subtitle: "试试笔记本名称或课程。")
+                        EmptyNotebook(symbol: "magnifyingglass", title: "没有找到笔记本")
                     } else {
-                        Text("题目、草稿和思路，都写在这里。")
-                            .font(.subheadline).foregroundStyle(Notebook.secondary)
                         LazyVGrid(columns: [GridItem(.adaptive(minimum: 164, maximum: 244), spacing: 24)], alignment: .leading, spacing: 30) {
                             ForEach(visibleBooks) { book in
                                 shelfBook(book)
@@ -105,12 +103,9 @@ struct NotebooksView: View {
     private var emptyShelf: some View {
         VStack(spacing: 22) {
             Image(systemName: "book.closed").font(.system(size: 52, weight: .ultraLight)).foregroundStyle(Notebook.accent)
-            VStack(spacing: 8) {
-                Text("从一本笔记开始").heading()
-                Text("用 Apple Pencil 写下思路，也可以插入题目图片。")
-                    .font(.subheadline).foregroundStyle(Notebook.secondary).multilineTextAlignment(.center)
-            }
-            Button("新建笔记本") { creating = true }.buttonStyle(NotebookButton())
+            Text("新建笔记本").font(.subheadline).foregroundStyle(Notebook.secondary)
+            Button { creating = true } label: { Image(systemName: "plus").frame(width: 20, height: 44) }
+                .buttonStyle(NotebookButton()).accessibilityLabel("新建笔记本")
         }.frame(maxWidth: .infinity).padding(.vertical, 70)
     }
 
@@ -327,7 +322,7 @@ private struct NotebookEditorView: View {
                     }
                 } else {
                     VStack(spacing: 20) {
-                        EmptyNotebook(symbol: "doc", title: "还没有页面", subtitle: "添一页，开始写。")
+                        EmptyNotebook(symbol: "doc", title: "还没有页面")
                         Button("添加页面") { addPage() }.buttonStyle(NotebookButton())
                     }.frame(maxWidth: .infinity, maxHeight: .infinity)
                 }
@@ -460,8 +455,9 @@ private struct NotebookEditorView: View {
                         Image(systemName: "arrow.uturn.forward").frame(width: 44, height: 44)
                     }.accessibilityLabel("重做").disabled(!store.canRedo)
                     toolbarDivider
-                    Label(fingerDrawing ? "手指与 Pencil" : "Apple Pencil", systemImage: fingerDrawing ? "hand.draw" : "pencil.tip.crop.circle")
-                        .font(.caption).foregroundStyle(Notebook.tertiary).padding(.horizontal, 8)
+                    Image(systemName: fingerDrawing ? "hand.draw" : "pencil.tip.crop.circle")
+                        .font(.system(size: 18)).foregroundStyle(Notebook.tertiary).frame(width: 44, height: 44)
+                        .accessibilityLabel(fingerDrawing ? "手指与 Apple Pencil 书写" : "仅 Apple Pencil 书写")
                 }.padding(.horizontal, 10).padding(.vertical, 7)
             }.foregroundStyle(Notebook.secondary)
                 .disabled(page == nil || store.isStorageReadOnly)
@@ -482,8 +478,8 @@ private struct NotebookEditorView: View {
                 guard let pageID = page?.id else { return }
                 if let onAsk { onAsk(notebookID, pageID) } else { assistant = true }
             } label: {
-                Label("问一步", systemImage: "sparkles").font(.subheadline.weight(.medium))
-                    .padding(.horizontal, 10).frame(minHeight: 44)
+                Image(systemName: "sparkles").font(.system(size: 20))
+                    .frame(width: 44, height: 44)
                     .foregroundStyle(Notebook.softInk).background(Notebook.soft, in: RoundedRectangle(cornerRadius: 10))
             }.buttonStyle(.plain).disabled(page == nil || store.isStorageReadOnly)
                 .accessibilityLabel("就这一页问一步").accessibilityIdentifier("ask-notebook")
@@ -500,9 +496,10 @@ private struct NotebookEditorView: View {
             }.accessibilityLabel("上一页").disabled(currentIndex == 0)
             Spacer()
             VStack(spacing: 2) {
-                Text("第 \(currentIndex + 1) 页 / \(pages.count) 页")
+                Text("\(currentIndex + 1) / \(pages.count)")
                     .font(.caption).monospacedDigit().foregroundStyle(Notebook.secondary)
                     .accessibilityIdentifier("page-index")
+                    .accessibilityLabel("第 \(currentIndex + 1) 页，共 \(pages.count) 页")
                 if pendingSave {
                     Button("笔迹未保存 · 重试") { store.save() }
                         .font(.caption2).foregroundStyle(Notebook.amber).frame(minHeight: 44)
@@ -563,15 +560,24 @@ private struct NotebookEditorView: View {
         Menu {
             ForEach(NotePaper.allCases, id: \.self) { paper in
                 Button { finishTitleEditing(); dismissKeyboard(); store.setPaper(paper, pageID: page.id) } label: {
-                    Label(paper.title, systemImage: paper == page.paper ? "checkmark" : "doc")
+                    Label(paper.title, systemImage: paper == page.paper ? "checkmark" : paperSymbol(paper))
                 }
             }
             Divider()
             Button { addPage() } label: { Label("添加页面", systemImage: "plus") }
             Button(role: .destructive) { deletingPage = page } label: { Label("删除这一页", systemImage: "trash") }
         } label: {
-            Image(systemName: "doc").frame(width: 44, height: 44)
+            Image(systemName: paperSymbol(page.paper)).frame(width: 44, height: 44)
         }.accessibilityLabel("纸张与页面选项，当前\(page.paper.title)").accessibilityIdentifier("paper-menu").disabled(store.isStorageReadOnly)
+    }
+
+    private func paperSymbol(_ paper: NotePaper) -> String {
+        switch paper {
+        case .blank: return "doc"
+        case .ruled: return "text.alignleft"
+        case .grid: return "square.grid.3x3"
+        case .dotted: return "circle.grid.3x3"
+        }
     }
 
     private func pageCanvas(_ page: NotePage) -> some View {
@@ -580,6 +586,8 @@ private struct NotebookEditorView: View {
                        onUndoStateChange: { _, _ in }, onEditText: { objectID in beginTextEditing(objectID: objectID) })
             .id(page.id)
             .accessibilityLabel("\(pageDisplayTitle(page))的书写画布")
+            .accessibilityIdentifier("notebook-canvas")
+            .accessibilityValue("手写\(store.drawing(for: page.id).strokes.count)笔，图片\(page.objects.filter { $0.image != nil }.count)张")
     }
 
     private func pagesRail(vertical: Bool) -> some View {
@@ -616,7 +624,7 @@ private struct NotebookEditorView: View {
                     .frame(width: vertical ? 116 : 64)
                     .clipShape(RoundedRectangle(cornerRadius: 4))
                     .overlay(RoundedRectangle(cornerRadius: 4).stroke(selected ? Notebook.accent : Notebook.lineStrong, lineWidth: selected ? 2 : 1))
-                Text("\(index + 1) · \(item.title.isEmpty ? "未命名" : item.title)")
+                Text(thumbnailTitle(item, index: index))
                     .font(.caption2).foregroundStyle(selected ? Notebook.accent : Notebook.secondary)
                     .lineLimit(1).frame(width: vertical ? 116 : 76, alignment: .leading)
             }.padding(3)
@@ -636,14 +644,16 @@ private struct NotebookEditorView: View {
 
     private func addPageButton(vertical: Bool) -> some View {
         Button { addPage() } label: {
-            VStack(spacing: 8) {
-                Image(systemName: "plus").font(.system(size: 21, weight: .light))
-                Text("添一页").font(.caption)
-            }
+            Image(systemName: "plus").font(.system(size: 21, weight: .light))
             .foregroundStyle(Notebook.tertiary).frame(width: vertical ? 116 : 76, height: vertical ? 112 : 102)
             .background(Notebook.surface.opacity(0.6), in: RoundedRectangle(cornerRadius: 5))
             .overlay(RoundedRectangle(cornerRadius: 5).stroke(Notebook.lineStrong, style: StrokeStyle(lineWidth: 1, dash: [4, 4])))
         }.buttonStyle(.plain).accessibilityLabel("添加页面").accessibilityIdentifier("page-create").disabled(store.isStorageReadOnly)
+    }
+
+    private func thumbnailTitle(_ item: NotePage, index: Int) -> String {
+        let automatic = item.title.range(of: "^第\\s*\\d+\\s*页$", options: .regularExpression) != nil
+        return item.title.isEmpty || automatic ? "\(index + 1)" : "\(index + 1)  \(item.title)"
     }
 
     private func addPage() {

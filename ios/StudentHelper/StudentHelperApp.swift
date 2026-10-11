@@ -16,25 +16,11 @@ struct WorkspaceView: View {
     @EnvironmentObject private var notebooks: NotebookStore
     @Environment(\.accessibilityReduceMotion) private var reduced
     @Environment(\.scenePhase) private var scenePhase
-    @State private var tab: WorkspaceTab = .chat
     #if DEBUG
     @State private var modelSettingsPreview = ProcessInfo.processInfo.arguments.contains("--model-settings-preview")
     #endif
     var body: some View {
-        Group {
-        if UIDevice.current.userInterfaceIdiom == .pad {
-            PadWorkspaceView()
-        } else {
-        TabView(selection: $tab) {
-            NavigationStack { ChatView() }.tabItem { Label("聊天", systemImage: "bubble.left.and.text.bubble.right") }.tag(WorkspaceTab.chat)
-            NavigationStack { RecordsView(tab: $tab) }.tabItem { Label("记录", systemImage: "list.bullet.clipboard") }.tag(WorkspaceTab.records)
-            NavigationStack { FilesView(tab: $tab) }.tabItem { Label("文件", systemImage: "folder") }.tag(WorkspaceTab.files)
-            NavigationStack { ReviewListView() }.tabItem { Label("复习", systemImage: "arrow.counterclockwise.circle") }.tag(WorkspaceTab.review)
-            NotebooksView().tabItem { Label("笔记本", systemImage: "book.closed") }.tag(WorkspaceTab.notebooks)
-        }
-        .toolbarBackground(Notebook.side, for: .tabBar).toolbarBackground(.visible, for: .tabBar)
-        }
-        }
+        PadWorkspaceView()
         .overlay(alignment: .top) {
             if let text = store.notice {
                 Text(text).font(.footnote).foregroundStyle(Notebook.ink).padding(14).background(Notebook.surface, in: Capsule()).shadow(color: .black.opacity(0.08), radius: 10, y: 4).padding(16)
@@ -87,6 +73,15 @@ struct PadWorkspaceView: View {
             case .files: NavigationStack { FilesView(tab: $tab) }
             case .review: NavigationStack { ReviewListView() }
             case .settings: NavigationStack { SettingsView() }
+            }
+        }
+        .onChange(of: destination) { _, selected in
+            switch selected {
+            case .notebooks: tab = .notebooks
+            case .records: tab = .records
+            case .files: tab = .files
+            case .review: tab = .review
+            default: break
             }
         }
         .onChange(of: tab) { _, selected in if selected == .chat { destination = .chat } }
