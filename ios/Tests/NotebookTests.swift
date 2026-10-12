@@ -15,6 +15,14 @@ final class NotebookTests: XCTestCase {
         try? FileManager.default.removeItem(at: folder); store = nil
     }
 
+    func testBlankFingerTargetIsNavigationLayerInsteadOfPencilKit() {
+        let surface = NotebookPageSurface(frame: CGRect(x: 0, y: 0, width: 768, height: 1086))
+        surface.selection.allowsObjectSelection = true
+        surface.layoutIfNeeded()
+        XCTAssertTrue(surface.hitTest(CGPoint(x: 300, y: 600), with: nil) === surface.selection)
+        XCTAssertNil(surface.selection.hitTest(CGPoint(x: -20, y: 600), with: nil))
+    }
+
     func testCleanFirstLaunchHasNoSampleNotebook() {
         XCTAssertTrue(store.notebooks.isEmpty)
         XCTAssertNil(store.currentPage)
