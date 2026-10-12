@@ -19,19 +19,26 @@ final class NotebookAgentTests: XCTestCase {
         for _ in 0..<100 where model.busy { try await Task.sleep(for: .milliseconds(30)) }
         XCTAssertFalse(model.busy)
         let previousWindow = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.flatMap(\.windows).first { $0.isKeyWindow }
-        let window = UIWindow(frame: CGRect(x: 0, y: 0, width: 768, height: 1024))
+        let scene = try XCTUnwrap(previousWindow?.windowScene ?? UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
+        let window = UIWindow(windowScene: scene)
+        window.frame = CGRect(x: 0, y: 0, width: 768, height: 1024)
         let root = NotebookAssistantView(notebookID: book, pageID: page, availableHeight: 600,
             panelSize: CGSize(width: 600, height: 600), model: model)
             .environmentObject(store).environmentObject(LearningStore(fileURL: folder.appendingPathComponent("learning.json")))
             .environmentObject(AppAutomation())
         let host = UIHostingController(rootView: root)
         window.rootViewController = host; window.makeKeyAndVisible()
+        host.view.setNeedsLayout(); host.view.layoutIfNeeded()
         defer { window.isHidden = true; previousWindow?.makeKey() }
         func history(in view: UIView) -> UIScrollView? {
             if let scroll = view as? UIScrollView, scroll.isScrollEnabled { return scroll }
             return view.subviews.lazy.compactMap { history(in: $0) }.first
         }
-        try await Task.sleep(for: .milliseconds(700))
+        for _ in 0..<50 {
+            if history(in: host.view) != nil { break }
+            try await Task.sleep(for: .milliseconds(50))
+            host.view.layoutIfNeeded()
+        }
         let original = try XCTUnwrap(history(in: host.view))
         NotebookAgentProtocol.replies = [["role": "assistant", "content": String(repeating: "可以得到 $a_{n+1}=\\sqrt{2a_n}$，继续检查。\n\n", count: 20)]]
         model.question = "下一步"; model.ask(store: store)
