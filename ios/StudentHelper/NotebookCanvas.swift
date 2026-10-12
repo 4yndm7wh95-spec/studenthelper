@@ -547,9 +547,15 @@ final class NotebookPKCanvasView: PKCanvasView {
         redo.discoverabilityTitle = "重做"
         return [undo, redo]
     }
+    override func hitTest(_ point: CGPoint, with event: UIEvent?) -> UIView? {
+        // Fingers navigate the page; only the explicit ink lasso needs PencilKit's editing touches.
+        if !(tool is PKLassoTool), event?.allTouches?.contains(where: { $0.type == .direct }) == true { return nil }
+        return super.hitTest(point, with: event)
+    }
     override func canPerformAction(_ action: Selector, withSender sender: Any?) -> Bool {
         if action == #selector(undoNotebook) { return canUndoNotebook }
         if action == #selector(redoNotebook) { return canRedoNotebook }
+        guard tool is PKLassoTool, !drawing.strokes.isEmpty else { return false }
         return super.canPerformAction(action, withSender: sender)
     }
     @objc private func undoNotebook(_ sender: UIKeyCommand) { onUndo?() }

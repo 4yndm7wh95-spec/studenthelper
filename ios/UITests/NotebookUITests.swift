@@ -202,6 +202,12 @@ import UIKit
         paper.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.85)).tap()
         let dismissed = XCTNSPredicateExpectation(predicate: NSPredicate(format: "exists == false OR hittable == false"), object: grip)
         XCTAssertEqual(XCTWaiter.wait(for: [dismissed], timeout: 5), .completed)
+        paper.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.85)).press(forDuration: 0.8)
+        XCTAssertFalse(app.menuItems["Select All"].exists)
+        XCTAssertFalse(app.menuItems["Insert Space"].exists)
+        XCTAssertFalse(app.buttons["Select All"].exists)
+        XCTAssertFalse(app.buttons["Insert Space"].exists)
+
 
         app.buttons["钢笔"].tap()
         let points = (0...24).map { index -> [String: Double] in
