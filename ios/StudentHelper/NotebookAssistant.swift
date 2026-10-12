@@ -283,7 +283,7 @@ final class NotebookAssistantModel: ObservableObject {
         case "propose_move_object":
             let objectID = try Self.uuid("object_id", args)
             guard let object = page.objects.first(where: { $0.id == objectID }) else { throw NoteStorageError.missingObject }
-            let frame = try Self.frame(args).clamped(pageWidth: page.width, pageHeight: page.height)
+            let frame = try object.placedFrame(Self.frame(args), rotation: object.angle, pageWidth: page.width, pageHeight: page.height)
             let label = object.image?.name ?? String((object.text ?? "注释").prefix(30))
             proposal = NoteProposal(description: "将\(page.title)的“\(label)”移到 (\(Int(frame.x)), \(Int(frame.y)))，尺寸 \(Int(frame.width)) × \(Int(frame.height))", action: .setObjectFrame(pageID: id, objectID: objectID, frame: frame))
         case "propose_delete_object":
