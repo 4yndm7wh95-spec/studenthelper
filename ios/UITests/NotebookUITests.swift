@@ -192,7 +192,7 @@ import UIKit
         let gripStart = grip.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
         gripStart.press(forDuration: 0.05, thenDragTo: gripStart.withOffset(CGVector(dx: -60, dy: 100)))
         let read = try await rpc(endpoint, token: token, id: 90, method: "tools/call", params: ["name": "read_page", "arguments": ["page_id": pageID]])
-        let metadata = try metadata(read)
+        let metadata = try self.metadata(read)
         let objects = try XCTUnwrap(metadata["objects"] as? [[String: Any]])
         XCTAssertGreaterThan(abs(try XCTUnwrap(objects.first?["rotation"] as? Double)), 0.05)
         capture(app, "iPadRotatedProblemImage")
