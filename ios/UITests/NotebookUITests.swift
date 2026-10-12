@@ -58,6 +58,10 @@ import UIKit
         XCTAssertTrue(app.descendants(matching: .any)["notebook-question"].exists)
         XCTAssertFalse(app.buttons["问一步"].isEnabled, "An empty question must not send a model request")
         capture(app, "iPadNotebookAssistant")
+        openMenu(app.buttons["paper-menu"]); app.buttons["添加页面"].tap()
+        let context = app.staticTexts["chat-page-context"]
+        let switched = XCTNSPredicateExpectation(predicate: NSPredicate(format: "label == %@", "第 3 页"), object: context)
+        XCTAssertEqual(XCTWaiter.wait(for: [switched], timeout: 5), .completed)
         app.buttons["关闭"].tap()
         XCTAssertTrue(app.buttons["ask-notebook"].waitForExistence(timeout: 5))
     }
@@ -152,6 +156,12 @@ import UIKit
         let state = try await rpc(endpoint, token: token, id: 2, method: "tools/call", params: ["name": "read_app_state", "arguments": ["scope": "overview"]])
         let overview = try metadata(state)
         let pageID = try XCTUnwrap(overview["selected_page_id"] as? String)
+        let bookID = try XCTUnwrap(overview["selected_notebook_id"] as? String)
+        app.buttons["ask-notebook"].tap()
+        _ = try await rpc(endpoint, token: token, id: 40, method: "tools/call", params: ["name": "perform_app_action", "arguments": ["action": "create_page", "notebook_id": bookID, "title": "AI 参考页"]])
+        XCTAssertEqual(app.staticTexts["chat-page-context"].label, "第 1 页", "AI navigation must preserve the question's chat session")
+        _ = try await rpc(endpoint, token: token, id: 41, method: "tools/call", params: ["name": "perform_app_action", "arguments": ["action": "select_page", "page_id": pageID]])
+        app.buttons["关闭"].tap()
         let image = UIGraphicsImageRenderer(size: CGSize(width: 640, height: 160)).image { output in
             UIColor.white.setFill(); output.fill(CGRect(x: 0, y: 0, width: 640, height: 160))
             ("Solve: 2x + 3 = 7" as NSString).draw(at: CGPoint(x: 28, y: 48), withAttributes: [.font: UIFont.systemFont(ofSize: 34), .foregroundColor: UIColor.black])

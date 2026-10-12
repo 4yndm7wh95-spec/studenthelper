@@ -286,6 +286,7 @@ private struct NotebookEditorView: View {
     @State private var titleDirty = false
     @State private var settings = false
     @State private var assistant = false
+    @State private var assistantPageID: UUID?
     @State private var photo: PhotosPickerItem?
     @State private var photoImporter = false
     @State private var fileImporter = false
@@ -343,10 +344,10 @@ private struct NotebookEditorView: View {
                         .disabled(store.isStorageReadOnly)
 
                 }
-                if assistant, let page {
+                if assistant, let assistantID = assistantPageID ?? page?.id, store.page(id: assistantID) != nil {
                     VStack { Spacer(minLength: 0); HStack { Spacer(minLength: 0)
-                        NotebookAssistantView(notebookID: notebookID, pageID: page.id, availableHeight: geometry.size.height - 24, onClose: { assistant = false })
-                            .id(page.id).frame(width: min(370, geometry.size.width - 24))
+                        NotebookAssistantView(notebookID: notebookID, pageID: assistantID, availableHeight: geometry.size.height - 24, onClose: { assistant = false })
+                            .id(assistantID).frame(width: min(370, geometry.size.width - 24))
                             .fixedSize(horizontal: false, vertical: true)
                     } }.padding(12).transition(.opacity.combined(with: .scale(scale: 0.95, anchor: .bottomTrailing)))
                 }
@@ -387,6 +388,7 @@ private struct NotebookEditorView: View {
             pageTitle = page?.title ?? ""
         }
         .onChange(of: page?.id) { _, _ in
+            if !automation.active { assistantPageID = page?.id }
             finishTitleEditing()
             pageTitleFocused = false
             titlePageID = page?.id
@@ -509,7 +511,7 @@ private struct NotebookEditorView: View {
             Button {
                 finishTitleEditing(); dismissKeyboard()
                 guard let pageID = page?.id else { return }
-                if let onAsk { onAsk(notebookID, pageID) } else { assistant = true }
+                if let onAsk { onAsk(notebookID, pageID) } else { assistantPageID = pageID; assistant = true }
             } label: {
                 Image(systemName: "sparkles").font(.system(size: 20))
                     .frame(width: 44, height: 44).contentShape(Rectangle())

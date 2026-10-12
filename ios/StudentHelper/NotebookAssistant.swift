@@ -395,7 +395,11 @@ struct NotebookAssistantView: View {
         VStack(spacing: 8) {
             HStack {
                 Image(systemName: "sparkles").foregroundStyle(Notebook.accent)
-                Text("笔记助手").font(.subheadline.weight(.medium))
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("笔记助手").font(.subheadline.weight(.medium))
+                    Text(store.page(id: pageID)?.title ?? "").font(.caption2).foregroundStyle(Notebook.tertiary)
+                        .accessibilityIdentifier("chat-page-context")
+                }
                 Spacer()
                 Button { settings = true } label: { Image(systemName: "gearshape").frame(width: 36, height: 36) }.accessibilityLabel("模型设置")
                 Button { model.cancel(); if let onClose { onClose() } else { dismiss() } } label: {
