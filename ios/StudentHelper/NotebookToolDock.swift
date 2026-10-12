@@ -14,9 +14,9 @@ struct NotebookToolDock<Content: View>: View {
     var body: some View {
         GeometryReader { geometry in
             let size = geometry.size
-            let length = min(CGFloat(452), max(100, (vertical ? size.height : size.width) - 32))
-            let width: CGFloat = dragging ? 58 : vertical ? 68 : length
-            let height: CGFloat = dragging ? 58 : vertical ? length : 68
+            let length = min(CGFloat(vertical ? 412 : 396), max(100, (vertical ? size.height : size.width) - 32))
+            let width: CGFloat = dragging ? 58 : vertical ? 64 : length
+            let height: CGFloat = dragging ? 58 : vertical ? length : 76
             ZStack {
                 RoundedRectangle(cornerRadius: dragging ? 29 : 26, style: .continuous)
                     .fill(.regularMaterial)
@@ -26,12 +26,12 @@ struct NotebookToolDock<Content: View>: View {
                         .foregroundStyle(Notebook.accent).transition(.opacity.combined(with: .scale(scale: 0.7)))
                 }
                 Group {
-                    let layout = vertical ? AnyLayout(HStackLayout(spacing: 0)) : AnyLayout(VStackLayout(spacing: 0))
+                    let layout = AnyLayout(VStackLayout(spacing: 0))
                     layout {
                         handle(vertical: vertical, size: size)
                         ScrollView(vertical ? .vertical : .horizontal, showsIndicators: false) {
-                            let tools = vertical ? AnyLayout(VStackLayout(spacing: 2)) : AnyLayout(HStackLayout(spacing: 2))
-                            tools { content(vertical) }.padding(4)
+                            let tools = vertical ? AnyLayout(VStackLayout(spacing: 4)) : AnyLayout(HStackLayout(spacing: 4))
+                            tools { content(vertical) }.padding(8)
                         }
                     }
                 }.opacity(dragging ? 0 : 1).scaleEffect(dragging ? 0.75 : 1)
@@ -50,8 +50,8 @@ struct NotebookToolDock<Content: View>: View {
 
     private func handle(vertical: Bool, size: CGSize) -> some View {
         Capsule().fill(Notebook.secondary.opacity(0.35))
-            .frame(width: vertical ? 3 : 26, height: vertical ? 26 : 3)
-            .frame(width: vertical ? 16 : nil, height: vertical ? nil : 16)
+            .frame(width: 24, height: 3)
+            .frame(maxWidth: .infinity).frame(height: 16)
             .contentShape(Rectangle())
             .gesture(DragGesture(minimumDistance: 6, coordinateSpace: .named("notebook-dock-space"))
                 .onChanged { value in move(value.location) }
@@ -88,8 +88,8 @@ struct NotebookToolDock<Content: View>: View {
         switch edge {
         case "left": return CGPoint(x: 46, y: y)
         case "right": return CGPoint(x: max(46, size.width - 46), y: y)
-        case "top": return CGPoint(x: x, y: 100)
-        default: return CGPoint(x: x, y: max(100, size.height - 94))
+        case "top": return CGPoint(x: x, y: 44)
+        default: return CGPoint(x: x, y: max(44, size.height - 44))
         }
     }
 }

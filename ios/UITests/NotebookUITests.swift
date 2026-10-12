@@ -25,7 +25,7 @@ import UIKit
         XCTAssertTrue(app.buttons["ask-notebook"].waitForExistence(timeout: 5))
     }
     private func capture(_ app: XCUIApplication, _ name: String) {
-        let shot = XCTAttachment(screenshot: app.screenshot()); shot.name = name; shot.lifetime = .keepAlways; add(shot)
+        let shot = XCTAttachment(screenshot: XCUIScreen.main.screenshot()); shot.name = name; shot.lifetime = .keepAlways; add(shot)
     }
     // SwiftUI Menu exposes a wrapper button that XCTest cannot scroll to.
     // Tap its observed onscreen bounds, then verify the menu actually opens.
@@ -36,7 +36,7 @@ import UIKit
     }
     func testNotebookPagePaperAndAssistantThroughUI() {
         let app = application(); create(app, title: "Calculus")
-        let title = app.textFields["page-title"]
+        let title = app.buttons["page-browser"]
         XCTAssertTrue(title.waitForExistence(timeout: 5)); XCTAssertEqual(title.value as? String, "第 1 页")
         openMenu(app.buttons["paper-menu"]); app.buttons["方格"].tap()
         XCTAssertTrue(app.buttons["paper-menu"].label.contains("方格"))
@@ -51,7 +51,10 @@ import UIKit
         XCTAssertFalse(app.buttons["擦除整笔"].exists)
         app.buttons["钢笔"].tap()
         app.buttons["ask-notebook"].tap()
-        XCTAssertTrue(app.navigationBars["笔记助手"].waitForExistence(timeout: 5))
+        let chat = app.descendants(matching: .any).matching(identifier: "notebook-chat-window").firstMatch
+        XCTAssertTrue(chat.waitForExistence(timeout: 5))
+        XCTAssertLessThan(chat.frame.height, app.frame.height * 0.5)
+        XCTAssertLessThan(chat.frame.width, app.frame.width * 0.7)
         XCTAssertTrue(app.descendants(matching: .any)["notebook-question"].exists)
         XCTAssertFalse(app.buttons["问一步"].isEnabled, "An empty question must not send a model request")
         capture(app, "iPadNotebookAssistant")
@@ -90,22 +93,34 @@ import UIKit
         }
         XCTAssertTrue(app.buttons["钢笔"].isHittable)
     }
-    func testFingerInkUndoRedoAndRestartPreserveNativeDrawing() {
-        let app = application(); create(app, title: "Ink")
-        openMenu(app.buttons["笔记本选项"]); app.buttons["用手指书写"].tap()
+    func testSingleFingerPanAndLargeSwipeTurnPagesWithoutInk() {
+        let app = application(); create(app, title: "Gestures")
         let canvas = app.descendants(matching: .any).matching(identifier: "notebook-canvas").firstMatch
         XCTAssertTrue(canvas.waitForExistence(timeout: 5))
-        let from = canvas.coordinate(withNormalizedOffset: CGVector(dx: 0.3, dy: 0.35))
-        let to = canvas.coordinate(withNormalizedOffset: CGVector(dx: 0.65, dy: 0.42))
-        from.press(forDuration: 0.05, thenDragTo: to)
-        waitForInk(canvas, contains: "手写1笔")
-        app.buttons["撤销"].tap(); waitForInk(canvas, contains: "手写0笔")
-        app.buttons["重做"].tap(); waitForInk(canvas, contains: "手写1笔")
-        capture(app, "iPadNativeInk")
+        let browser = app.buttons["page-browser"]
+        let viewport = app.scrollViews["notebook-scroll"]
+        XCTAssertTrue(viewport.exists)
+        let initialOffset = viewport.value as? String
+        let from = canvas.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.6))
+        from.press(forDuration: 0.05, thenDragTo: canvas.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.3)))
+        let moved = NSPredicate { _, _ in (viewport.value as? String) != initialOffset }
+        XCTAssertEqual(XCTWaiter.wait(for: [XCTNSPredicateExpectation(predicate: moved, object: nil)], timeout: 5), .completed)
+        waitForInk(canvas, contains: "手写0笔")
+        XCTAssertEqual(browser.value as? String, "第 1 页")
+        canvas.coordinate(withNormalizedOffset: CGVector(dx: 0.2, dy: 0.5))
+            .press(forDuration: 0.05, thenDragTo: canvas.coordinate(withNormalizedOffset: CGVector(dx: 0.8, dy: 0.5)))
+        let next = XCTNSPredicateExpectation(predicate: NSPredicate(format: "value == %@", "第 2 页"), object: browser)
+        XCTAssertEqual(XCTWaiter.wait(for: [next], timeout: 6), .completed)
+        waitForInk(canvas, contains: "手写0笔")
+        canvas.coordinate(withNormalizedOffset: CGVector(dx: 0.8, dy: 0.5))
+            .press(forDuration: 0.05, thenDragTo: canvas.coordinate(withNormalizedOffset: CGVector(dx: 0.2, dy: 0.5)))
+        let previous = XCTNSPredicateExpectation(predicate: NSPredicate(format: "value == %@", "第 1 页"), object: browser)
+        XCTAssertEqual(XCTWaiter.wait(for: [previous], timeout: 6), .completed)
         app.terminate(); app.launch()
-        let book = app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", "打开笔记本：Ink")).firstMatch
+        let book = app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", "打开笔记本：Gestures")).firstMatch
         XCTAssertTrue(book.waitForExistence(timeout: 8)); book.tap()
-        XCTAssertTrue(canvas.waitForExistence(timeout: 5)); waitForInk(canvas, contains: "手写1笔")
+        XCTAssertTrue(browser.waitForExistence(timeout: 5)); XCTAssertEqual(browser.value as? String, "第 1 页")
+        capture(app, "iPadFingerNavigation")
     }
     private func waitForInk(_ canvas: XCUIElement, contains value: String) {
         let saved = XCTNSPredicateExpectation(predicate: NSPredicate(format: "value CONTAINS %@", value), object: canvas)

@@ -331,8 +331,6 @@ private struct NotebookEditorView: View {
                     Button("添加页面") { addPage() }.buttonStyle(NotebookButton())
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                 }
-                editorControls(expanded: expanded, compact: geometry.size.width < 520)
-                    .padding(.horizontal, 12).padding(.top, 6)
                 if expanded {
                     pagesRail(vertical: true).frame(width: 132)
                         .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 22))
@@ -343,8 +341,14 @@ private struct NotebookEditorView: View {
                 if page != nil {
                     NotebookToolDock { vertical in dockTools(vertical: vertical) }
                         .disabled(store.isStorageReadOnly)
-                    VStack { Spacer(); pagingFooter.frame(width: 190).padding(.bottom, 8) }
-                        .allowsHitTesting(!automation.active)
+
+                }
+                if assistant, let page {
+                    VStack { Spacer(minLength: 0); HStack { Spacer(minLength: 0)
+                        NotebookAssistantView(notebookID: notebookID, pageID: page.id, availableHeight: geometry.size.height - 24, onClose: { assistant = false })
+                            .id(page.id).frame(width: min(370, geometry.size.width - 24))
+                            .fixedSize(horizontal: false, vertical: true)
+                    } }.padding(12).transition(.opacity.combined(with: .scale(scale: 0.95, anchor: .bottomTrailing)))
                 }
             }.background(Notebook.paper)
         }
@@ -355,9 +359,19 @@ private struct NotebookEditorView: View {
         .navigationTitle(book?.title ?? "笔记本")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
+            ToolbarItem(placement: .topBarLeading) {
+                Button { finishTitleEditing(); dismissKeyboard(); railOverride = !(railOverride ?? false) } label: {
+                    Label(page?.title ?? "页面", systemImage: "sidebar.left").font(.caption).lineLimit(1)
+                }.accessibilityLabel((railOverride ?? false) ? "收起页面列表" : "展开页面列表")
+                    .accessibilityIdentifier("page-browser")
+                    .accessibilityValue("第 \(pageNumber) 页")
+            }
+            ToolbarItemGroup(placement: .topBarTrailing) {
+                if let page { paperMenu(page) }
+                pageActions
+            }
             ToolbarItem(placement: .topBarTrailing) {
                 Menu {
-                    Toggle("用手指书写", isOn: $fingerDrawing)
                     Button { bookTitle = book?.title ?? ""; renamingBook = true } label: { Label("笔记本名称", systemImage: "pencil") }
                     Button { settings = true } label: { Label("设置", systemImage: "gearshape") }
                 } label: { Image(systemName: "ellipsis").frame(width: 44, height: 44).contentShape(Rectangle()) }.accessibilityLabel("笔记本选项")
@@ -413,9 +427,6 @@ private struct NotebookEditorView: View {
                 }
             }.aiInteractionLocked()
         }
-        .sheet(isPresented: $assistant) {
-            if let page { NotebookAssistantView(notebookID: notebookID, pageID: page.id).aiInteractionLocked() }
-        }
         .sheet(isPresented: $textEditor) {
             NotebookTextSheet(text: $textDraft, isNew: editingTextID == nil) {
                 guard let pageID = textPageID else { return }
@@ -455,6 +466,7 @@ private struct NotebookEditorView: View {
         .onDisappear { finishTitleEditing() }
         .animation(reduced ? nil : .timingCurve(0.22, 1, 0.36, 1, duration: 0.42), value: railOverride)
         .animation(reduced ? nil : .timingCurve(0.22, 1, 0.36, 1, duration: 0.3), value: tool)
+        .animation(reduced ? nil : .timingCurve(0.42, 0, 0.58, 1, duration: 0.35), value: assistant)
     }
 
     private func receiveToolCommand(_ notification: Notification) {
@@ -467,31 +479,6 @@ private struct NotebookEditorView: View {
             else { penWidth = CGFloat(min(max(width, 1), 20)) }
         }
         if let enabled = info["allowsFingerDrawing"] as? Bool { fingerDrawing = enabled }
-    }
-
-    private func editorControls(expanded: Bool, compact: Bool) -> some View {
-        VStack(spacing: 0) {
-            HStack(spacing: 10) {
-                Button { finishTitleEditing(); dismissKeyboard(); railOverride = !expanded } label: {
-                    Image(systemName: "sidebar.left").frame(width: 44, height: 44).contentShape(Rectangle())
-                        .foregroundStyle(expanded ? Notebook.accent : Notebook.secondary)
-                }.accessibilityLabel(expanded ? "收起页面列表" : "展开页面列表")
-                if let page {
-                    TextField(pageDisplayTitle(page), text: Binding(get: { pageTitle }, set: { value in pageTitle = value; titleDirty = true }))
-                        .font(.subheadline.weight(.medium)).foregroundStyle(Notebook.ink)
-                        .focused($pageTitleFocused).submitLabel(.done).onSubmit { finishTitleEditing(); pageTitleFocused = false }
-                        .accessibilityLabel("页面名称").accessibilityIdentifier("page-title")
-                    paperMenu(page)
-                }
-                Spacer(minLength: 0)
-                if !compact { pageActions }
-            }.padding(.horizontal, 10).padding(.top, 4)
-
-            if compact {
-                HStack(spacing: 10) { Spacer(); pageActions }.padding(.horizontal, 14).padding(.bottom, 4)
-            }
-
-        }.padding(2).background(.regularMaterial, in: RoundedRectangle(cornerRadius: 18))
     }
 
     @ViewBuilder private func dockTools(vertical: Bool) -> some View {
@@ -507,10 +494,7 @@ private struct NotebookEditorView: View {
         Button { finishTitleEditing(); dismissKeyboard(); redoTrigger += 1 } label: {
             Image(systemName: "arrow.uturn.forward").frame(width: 44, height: 44).contentShape(Rectangle())
         }.accessibilityLabel("重做").disabled(!store.canRedo)
-        Button { fingerDrawing.toggle() } label: {
-            Image(systemName: fingerDrawing ? "hand.draw" : "pencil.tip.crop.circle")
-                .frame(width: 44, height: 44).contentShape(Rectangle())
-        }.accessibilityLabel(fingerDrawing ? "切换为仅 Pencil 书写" : "切换为手指书写")
+
     }
 
     private var pageActions: some View {
@@ -535,37 +519,17 @@ private struct NotebookEditorView: View {
         }
     }
 
-    private var pagingFooter: some View {
-        let pages = book?.pages ?? []
-        let currentIndex = pages.firstIndex { $0.id == page?.id } ?? 0
-        let pendingSave = page.map { store.pendingDrawingPageIDs.contains($0.id) } ?? false
-        return HStack(spacing: 14) {
-            Button { goToPage(at: currentIndex - 1) } label: {
-                Image(systemName: "chevron.left").frame(width: 44, height: 44).contentShape(Rectangle())
-            }.accessibilityLabel("上一页").disabled(currentIndex == 0)
-            Spacer()
-            VStack(spacing: 2) {
-                Text("\(currentIndex + 1) / \(pages.count)")
-                    .font(.caption).monospacedDigit().foregroundStyle(Notebook.secondary)
-                    .lineLimit(1).fixedSize(horizontal: true, vertical: false)
-                    .accessibilityIdentifier("page-index")
-                    .accessibilityLabel("第 \(currentIndex + 1) 页，共 \(pages.count) 页")
-                if pendingSave {
-                    Button("笔迹未保存 · 重试") { store.save() }
-                        .font(.caption2).foregroundStyle(Notebook.amber).frame(minHeight: 44)
-                        .accessibilityLabel("笔迹未保存，重试保存")
-                }
-            }
-            Spacer()
-            Button { goToPage(at: currentIndex + 1) } label: {
-                Image(systemName: "chevron.right").frame(width: 44, height: 44).contentShape(Rectangle())
-            }.accessibilityLabel("下一页").disabled(currentIndex >= pages.count - 1)
-        }.padding(.horizontal, 4).background(.regularMaterial, in: Capsule())
-    }
+    private var pageNumber: Int { (book?.pages.firstIndex { $0.id == page?.id } ?? 0) + 1 }
 
-    private func goToPage(at index: Int) {
-        guard let pages = book?.pages, pages.indices.contains(index) else { return }
-        finishTitleEditing(); dismissKeyboard(); store.selectPage(pages[index].id)
+    private func swipePage(_ forward: Bool) {
+        guard let pages = book?.pages, let page, let index = pages.firstIndex(where: { $0.id == page.id }) else { return }
+        finishTitleEditing(); dismissKeyboard()
+        withAnimation(reduced ? nil : .timingCurve(0.42, 0, 0.58, 1, duration: 0.38)) {
+            if forward {
+                if index + 1 < pages.count { store.selectPage(pages[index + 1].id) }
+                else { addPage() }
+            } else if index > 0 { store.selectPage(pages[index - 1].id) }
+        }
     }
 
     private var toolbarDivider: some View { Rectangle().fill(Notebook.line).frame(width: 1, height: 26).padding(.horizontal, 4) }
@@ -574,7 +538,7 @@ private struct NotebookEditorView: View {
         Button {
             finishTitleEditing(); dismissKeyboard(); tool = value
         } label: {
-            Image(systemName: symbol).font(.system(size: 20)).frame(width: 46, height: 44).contentShape(Rectangle())
+            Image(systemName: symbol).font(.system(size: 20)).frame(width: 44, height: 44).contentShape(Rectangle())
                 .foregroundStyle(tool == value ? Notebook.accent : Notebook.secondary)
                 .background(tool == value ? Notebook.soft : .clear, in: RoundedRectangle(cornerRadius: 10))
         }.buttonStyle(.plain).accessibilityLabel(title).accessibilityAddTraits(tool == value ? .isSelected : [])
@@ -616,8 +580,8 @@ private struct NotebookEditorView: View {
 
     private func pageCanvas(_ page: NotePage) -> some View {
         NotebookCanvas(pageID: page.id, store: store, tool: tool, inkColor: inkColor, lineWidth: lineWidth,
-                       allowsFingerDrawing: fingerDrawing, undoTrigger: undoTrigger, redoTrigger: redoTrigger,
-                       onUndoStateChange: { _, _ in }, onEditText: { objectID in beginTextEditing(objectID: objectID) })
+                       allowsFingerDrawing: false, undoTrigger: undoTrigger, redoTrigger: redoTrigger,
+                       onPageSwipe: swipePage, onUndoStateChange: { _, _ in }, onEditText: { objectID in beginTextEditing(objectID: objectID) })
             .id(page.id)
             .accessibilityLabel("\(pageDisplayTitle(page))的书写画布")
             .accessibilityIdentifier("notebook-canvas")
@@ -836,7 +800,7 @@ private struct NotebookWidthPicker: View {
     var body: some View {
         Button { presented = true } label: {
             VStack(spacing: 4) {
-                Capsule().fill(Notebook.secondary).frame(width: 24, height: min(max(width / 2, 2), 10))
+                Capsule().fill(Notebook.secondary).frame(width: 24, height: min(max(width / 2, 2), 10)).frame(height: 10)
                 Text(String(format: "%.0f", width)).font(.caption2).monospacedDigit()
             }.frame(width: 44, height: 44).contentShape(Rectangle())
         }.buttonStyle(.plain).accessibilityLabel("笔画粗细：\(Int(width))")

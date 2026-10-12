@@ -100,6 +100,28 @@ final class NotebookAgentTests: XCTestCase {
         XCTAssertTrue(model.proposals.isEmpty)
     }
 
+    func testFollowUpKeepsChatContextAndClearsComposer() async throws {
+        let folder = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: folder); NotebookAgentProtocol.replies = []; NotebookAgentProtocol.requests = [] }
+        let store = NotebookStore(folder: folder)
+        let book = try XCTUnwrap(store.createNotebook(title: "对话")), page = try XCTUnwrap(store.currentPage?.id)
+        NotebookAgentProtocol.requests = []
+        NotebookAgentProtocol.replies = [["role": "assistant", "content": "先减去3。"], ["role": "assistant", "content": "因为等式两边要减去同一个数。"]]
+        let configuration = URLSessionConfiguration.ephemeral; configuration.protocolClasses = [NotebookAgentProtocol.self]
+        let model = NotebookAssistantModel(notebookID: book, pageID: page, configuration: ModelConfiguration(address: "https://notebook.test/v1"), key: "unit-test-only", session: URLSession(configuration: configuration))
+        model.question = "这一步怎么做？"; model.ask(store: store)
+        XCTAssertTrue(model.question.isEmpty)
+        for _ in 0..<100 { if !model.busy { break }; try await Task.sleep(for: .milliseconds(50)) }
+        XCTAssertFalse(model.busy); XCTAssertEqual(model.conversation.count, 2)
+        model.question = "为什么？"; model.ask(store: store)
+        for _ in 0..<100 { if !model.busy { break }; try await Task.sleep(for: .milliseconds(50)) }
+        XCTAssertFalse(model.busy); XCTAssertEqual(model.conversation.count, 4)
+        let request = try XCTUnwrap(NotebookAgentProtocol.requests.last)
+        let messages = try XCTUnwrap(request["messages"] as? [[String: Any]])
+        XCTAssertTrue(messages.contains { $0["role"] as? String == "user" && $0["content"] as? String == "这一步怎么做？" })
+        XCTAssertTrue(messages.contains { $0["role"] as? String == "assistant" && $0["content"] as? String == "先减去3。" })
+    }
+
     private static func call(_ id: String, _ name: String, _ arguments: [String: Any]) -> [String: Any] {
         let encoded = (try? JSONSerialization.data(withJSONObject: arguments)) ?? Data()
         return ["id": id, "type": "function", "function": ["name": name, "arguments": String(decoding: encoded, as: UTF8.self)]]

@@ -42,6 +42,7 @@ struct NotebookCanvas: UIViewRepresentable {
     var allowsFingerDrawing = false
     var undoTrigger = 0
     var redoTrigger = 0
+    var onPageSwipe: (Bool) -> Void = { _ in }
     var onUndoStateChange: (Bool, Bool) -> Void = { _, _ in }
     var onEditText: (UUID) -> Void = { _ in }
 
@@ -110,6 +111,8 @@ struct NotebookCanvas: UIViewRepresentable {
         var previousParentWidth: CGFloat?
         var previousParentColor: UIColor?
         var previousParentFinger: Bool?
+        var panStart = CGPoint.zero
+        var panTouches = 0
 
         init(parent: NotebookCanvas) {
             self.parent = parent
@@ -179,7 +182,7 @@ struct NotebookCanvas: UIViewRepresentable {
                 host.pageView.selection.select(added.id)
             }
             loadedObjects = page.objects.map(\.id)
-            canvas.drawingPolicy = parent.allowsFingerDrawing ? .anyInput : .pencilOnly
+            canvas.drawingPolicy = .pencilOnly
             let color = UIColor(parent.inkColor).resolvedColor(with: UITraitCollection(userInterfaceStyle: .light))
             if previousParentTool != parent.tool || previousParentWidth != parent.lineWidth || previousParentColor != color || previousParentFinger != parent.allowsFingerDrawing { automatedTool = nil }
             previousParentTool = parent.tool; previousParentWidth = parent.lineWidth; previousParentColor = color; previousParentFinger = parent.allowsFingerDrawing
@@ -204,7 +207,8 @@ struct NotebookCanvas: UIViewRepresentable {
         func configureTool(_ tool: NotebookDrawingTool, color: UIColor, width: CGFloat, fingerDrawing: Bool?) {
             guard let host else { return }
             let canvas = host.pageView.canvas
-            if let fingerDrawing { canvas.drawingPolicy = fingerDrawing ? .anyInput : .pencilOnly }
+            canvas.drawingPolicy = .pencilOnly
+            canvas.drawingGestureRecognizer.allowedTouchTypes = [NSNumber(value: UITouch.TouchType.pencil.rawValue)]
             switch tool {
             case .pen:
                 canvas.tool = PKInkingTool(.pen, color: color, width: max(1, min(20, width)))
@@ -399,6 +403,31 @@ struct NotebookCanvas: UIViewRepresentable {
         func scrollViewDidZoom(_ scrollView: UIScrollView) {
             if scrollView === host?.scrollView { host?.centerPage() }
         }
+
+        func scrollViewWillBeginDragging(_ scrollView: UIScrollView) {
+            panStart = scrollView.contentOffset
+            panTouches = scrollView.panGestureRecognizer.numberOfTouches
+        }
+
+        func scrollViewDidScroll(_ scrollView: UIScrollView) {
+            if scrollView.isDragging { panTouches = max(panTouches, scrollView.panGestureRecognizer.numberOfTouches) }
+            scrollView.accessibilityValue = "\(Int(scrollView.contentOffset.x)),\(Int(scrollView.contentOffset.y))"
+        }
+
+        func scrollViewWillEndDragging(_ scrollView: UIScrollView, withVelocity velocity: CGPoint, targetContentOffset: UnsafeMutablePointer<CGPoint>) {
+            guard let host, scrollView === host.scrollView,
+                  panTouches == 1,
+                  !usingTool, !parent.store.isStorageReadOnly else { return }
+            let move = scrollView.panGestureRecognizer.translation(in: host)
+            let left = -scrollView.contentInset.left
+            let right = max(left, scrollView.contentSize.width - scrollView.bounds.width + scrollView.contentInset.right)
+            let boundary = move.x > 0 ? panStart.x <= left + 3 : panStart.x >= right - 3
+            guard boundary, abs(move.x) >= max(180, host.bounds.width * 0.32), abs(move.y) < abs(move.x) * 0.4 else { return }
+            targetContentOffset.pointee = panStart
+            guard flushDrawing() else { return }
+            let forward = move.x > 0
+            DispatchQueue.main.async { [weak self] in self?.parent.onPageSwipe(forward) }
+        }
     }
 }
 
@@ -418,8 +447,10 @@ final class NotebookCanvasHost: UIView {
         scrollView.showsVerticalScrollIndicator = false
         scrollView.showsHorizontalScrollIndicator = false
         scrollView.contentInsetAdjustmentBehavior = .never
-        scrollView.panGestureRecognizer.minimumNumberOfTouches = 2
+        scrollView.accessibilityIdentifier = "notebook-scroll"
+        scrollView.panGestureRecognizer.minimumNumberOfTouches = 1
         scrollView.panGestureRecognizer.allowedTouchTypes = [NSNumber(value: UITouch.TouchType.direct.rawValue)]
+        scrollView.pinchGestureRecognizer?.allowedTouchTypes = [NSNumber(value: UITouch.TouchType.direct.rawValue)]
         scrollView.minimumZoomScale = 0.25
         scrollView.maximumZoomScale = 4
         scrollView.addSubview(pageView)
@@ -429,7 +460,7 @@ final class NotebookCanvasHost: UIView {
         pageView.layer.shadowRadius = 12
         pageView.layer.shadowOffset = CGSize(width: 0, height: 3)
         accessibilityLabel = "A4 笔记纸"
-        accessibilityHint = "Apple Pencil 书写；双指移动或缩放。套索模式下用手指选中图片和文字。"
+        accessibilityHint = "Apple Pencil 书写，单指移动，双指缩放；纸张边缘大幅右滑下一页，左滑上一页。"
     }
 
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
