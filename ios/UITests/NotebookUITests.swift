@@ -58,6 +58,7 @@ import UIKit
         XCTAssertTrue(app.descendants(matching: .any)["notebook-question"].exists)
         XCTAssertFalse(app.buttons["问一步"].isEnabled, "An empty question must not send a model request")
         capture(app, "iPadNotebookAssistant")
+        if app.buttons["收起页面列表"].exists { app.buttons["收起页面列表"].tap() }
         openMenu(app.buttons["paper-menu"]); app.buttons["添加页面"].tap()
         let context = app.staticTexts["chat-page-context"]
         let switched = XCTNSPredicateExpectation(predicate: NSPredicate(format: "label == %@", "第 3 页"), object: context)
@@ -158,9 +159,9 @@ import UIKit
         let pageID = try XCTUnwrap(overview["selected_page_id"] as? String)
         let bookID = try XCTUnwrap(overview["selected_notebook_id"] as? String)
         app.buttons["ask-notebook"].tap()
-        _ = try await rpc(endpoint, token: token, id: 40, method: "tools/call", params: ["name": "perform_app_action", "arguments": ["action": "create_page", "notebook_id": bookID, "title": "AI 参考页"]])
+        _ = try await rpc(endpoint, token: token, id: 40, method: "tools/call", params: ["name": "perform_app_action", "arguments": ["action": "create_page", "parameters": ["notebook_id": bookID, "title": "AI 参考页"]]])
         XCTAssertEqual(app.staticTexts["chat-page-context"].label, "第 1 页", "AI navigation must preserve the question's chat session")
-        _ = try await rpc(endpoint, token: token, id: 41, method: "tools/call", params: ["name": "perform_app_action", "arguments": ["action": "select_page", "page_id": pageID]])
+        _ = try await rpc(endpoint, token: token, id: 41, method: "tools/call", params: ["name": "perform_app_action", "arguments": ["action": "select_page", "parameters": ["page_id": pageID]]])
         app.buttons["关闭"].tap()
         let image = UIGraphicsImageRenderer(size: CGSize(width: 640, height: 160)).image { output in
             UIColor.white.setFill(); output.fill(CGRect(x: 0, y: 0, width: 640, height: 160))
@@ -204,7 +205,10 @@ import UIKit
         let object = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
         XCTAssertNil(object["error"])
         let result = try XCTUnwrap(object["result"] as? [String: Any])
-        XCTAssertFalse((result["isError"] as? Bool) ?? false)
+        if (result["isError"] as? Bool) == true {
+            let details = (result["content"] as? [[String: Any]])?.compactMap { $0["text"] as? String }.joined(separator: "; ") ?? "工具未执行"
+            throw NSError(domain: "NotebookUITestMCP", code: id, userInfo: [NSLocalizedDescriptionKey: String(details.prefix(1000))])
+        }
         return result
     }
     private func metadata(_ result: [String: Any]) throws -> [String: Any] {
