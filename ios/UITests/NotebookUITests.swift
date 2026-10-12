@@ -58,7 +58,9 @@ import UIKit
         let initialPosition = chat.frame.origin
         let move = app.descendants(matching: .any).matching(identifier: "chat-move-handle").firstMatch
         XCTAssertGreaterThanOrEqual(move.frame.height, 44)
-        let moveStart = move.coordinate(withNormalizedOffset: CGVector(dx: 0.15, dy: 0.2))
+        let window = app.descendants(matching: .any).matching(identifier: "notebook-floating-window").firstMatch
+        XCTAssertTrue(window.exists)
+        let moveStart = window.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0)).withOffset(CGVector(dx: 0, dy: 22))
         moveStart.press(forDuration: 0.5, thenDragTo: moveStart.withOffset(CGVector(dx: -100, dy: -160)))
         XCTAssertLessThan(chat.frame.minX, initialPosition.x - 50)
         XCTAssertLessThan(chat.frame.minY, initialPosition.y - 80)
@@ -186,7 +188,7 @@ import UIKit
         }
         let data = try XCTUnwrap(image.pngData())
         _ = try await rpc(endpoint, token: token, id: 3, method: "tools/call", params: ["name": "perform_app_action", "arguments": ["action": "add_image", "parameters": ["page_id": pageID, "name": "Problem", "data_base64": data.base64EncodedString()]]])
-        app.buttons["套索"].tap()
+        app.buttons["钢笔"].tap()
         let grip = app.descendants(matching: .any).matching(identifier: "image-transform-handle").firstMatch
         XCTAssertTrue(grip.waitForExistence(timeout: 5))
         let gripStart = grip.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))

@@ -221,7 +221,7 @@ struct NotebookCanvas: UIViewRepresentable {
             case .lasso:
                 canvas.tool = PKLassoTool()
             }
-            host.pageView.selection.allowsObjectSelection = tool == .lasso
+            host.pageView.selection.allowsObjectSelection = true
         }
 
         func handle(_ command: NotebookCanvasCommand) {
