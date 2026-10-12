@@ -186,6 +186,17 @@ import UIKit
         }
         let data = try XCTUnwrap(image.pngData())
         _ = try await rpc(endpoint, token: token, id: 3, method: "tools/call", params: ["name": "perform_app_action", "arguments": ["action": "add_image", "parameters": ["page_id": pageID, "name": "Problem", "data_base64": data.base64EncodedString()]]])
+        app.buttons["套索"].tap()
+        let grip = app.descendants(matching: .any).matching(identifier: "image-transform-handle").firstMatch
+        XCTAssertTrue(grip.waitForExistence(timeout: 5))
+        let gripStart = grip.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
+        gripStart.press(forDuration: 0.05, thenDragTo: gripStart.withOffset(CGVector(dx: -60, dy: 100)))
+        let read = try await rpc(endpoint, token: token, id: 90, method: "tools/call", params: ["name": "read_page", "arguments": ["page_id": pageID]])
+        let metadata = try metadata(read)
+        let objects = try XCTUnwrap(metadata["objects"] as? [[String: Any]])
+        XCTAssertGreaterThan(abs(try XCTUnwrap(objects.first?["rotation"] as? Double)), 0.05)
+        capture(app, "iPadRotatedProblemImage")
+        app.buttons["钢笔"].tap()
         let points = (0...24).map { index -> [String: Double] in
             let angle = Double(index) / 24 * .pi * 2
             return ["x": 230 + cos(angle) * 80, "y": 500 + sin(angle) * 24]
@@ -209,19 +220,7 @@ import UIKit
         app.buttons["撤销"].tap(); waitForInk(canvas, contains: "手写0笔"); waitForInk(canvas, contains: "图片1张")
         app.buttons["重做"].tap(); waitForInk(canvas, contains: "手写1笔")
         capture(app, "iPadProblemAndCorrection")
-        app.buttons["套索"].tap()
-        let grip = app.descendants(matching: .any).matching(identifier: "image-transform-handle").firstMatch
-        XCTAssertTrue(grip.waitForExistence(timeout: 5))
-        let gripStart = grip.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
-        gripStart.press(forDuration: 0.05, thenDragTo: gripStart.withOffset(CGVector(dx: -60, dy: 100)))
-        let read = try await rpc(endpoint, token: token, id: 90, method: "tools/call", params: ["name": "read_page", "arguments": ["page_id": pageID]])
-        let result = try XCTUnwrap(read["result"] as? [String: Any])
-        let content = try XCTUnwrap(result["content"] as? [[String: Any]])
-        let json = try XCTUnwrap(content.first?["text"] as? String)
-        let metadata = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(json.utf8)) as? [String: Any])
-        let objects = try XCTUnwrap(metadata["objects"] as? [[String: Any]])
-        XCTAssertGreaterThan(abs(try XCTUnwrap(objects.first?["rotation"] as? Double)), 0.05)
-        capture(app, "iPadRotatedProblemImage")
+
 
     }
     private func rpc(_ endpoint: URL, token: String, id: Int, method: String, params: [String: Any]) async throws -> [String: Any] {

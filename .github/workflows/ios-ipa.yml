@@ -5,7 +5,7 @@ on:
       test_scope:
         description: Native checks to execute (MCP only is for a failed UI rerun)
         type: choice
-        options: [all, mcp, dock, windows]
+        options: [all, mcp, dock, windows, touch]
         default: all
   push:
     branches: [main]
