@@ -572,10 +572,15 @@ final class NotebookPageSurface: UIView {
         canvas.maximumZoomScale = 1
         canvas.drawingPolicy = .pencilOnly
         canvas.clipsToBounds = true
-        objectLayer.clipsToBounds = true
+        objectLayer.clipsToBounds = false
     }
 
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
+
+    override func point(inside point: CGPoint, with event: UIEvent?) -> Bool {
+        if selection.hitTest(selection.convert(point, from: self), with: event) != nil { return true }
+        return super.point(inside: point, with: event)
+    }
 
     override func layoutSubviews() {
         super.layoutSubviews()
@@ -820,7 +825,7 @@ final class NotebookObjectSelection: UIView, UIGestureRecognizerDelegate {
     }) }
 
     override func hitTest(_ point: CGPoint, with event: UIEvent?) -> UIView? {
-        guard isUserInteractionEnabled, allowsObjectSelection, bounds.contains(point) else { return nil }
+        guard isUserInteractionEnabled, allowsObjectSelection else { return nil }
         if let touches = event?.allTouches, touches.contains(where: { $0.type == .pencil }) || touches.count > 1 { return nil }
         if !deleteButton.isHidden && deleteButton.frame.contains(point) { return deleteButton }
         if !editButton.isHidden && editButton.frame.contains(point) { return editButton }
@@ -872,7 +877,7 @@ final class NotebookObjectSelection: UIView, UIGestureRecognizerDelegate {
                 let move = gesture.translation(in: self)
                 rect.origin = CGPoint(x: original.minX + move.x, y: original.minY + move.y)
             }
-            guard let bounded = try? NoteObject.bounded(NoteRect(rect), rotation: Double(angle), pageWidth: Double(bounds.width), pageHeight: Double(bounds.height)) else { return }
+            guard let bounded = try? object.placedFrame(NoteRect(rect), rotation: Double(angle), pageWidth: Double(bounds.width), pageHeight: Double(bounds.height)) else { return }
             rect = bounded.cgRect; previewRect = rect; previewAngle = angle
             onPreviewTransform?(object.id, rect, angle); refreshSelection()
             if gesture.state == .ended {

@@ -49,6 +49,26 @@ final class NotebookTests: XCTestCase {
         XCTAssertEqual(try JSONDecoder().decode(NoteObject.self, from: JSONSerialization.data(withJSONObject: old)).angle, 0)
     }
 
+    func testImageCanExtendOutsidePaperAndSurviveReloadAndUndo() throws {
+        _ = store.createNotebook(title: "越界图片")
+        let page = try XCTUnwrap(store.currentPage)
+        let image = UIGraphicsImageRenderer(size: CGSize(width: 160, height: 60)).image { output in
+            UIColor.blue.setFill(); output.fill(CGRect(x: 0, y: 0, width: 160, height: 60))
+        }
+        let original = NoteRect(x: -80, y: -40, width: page.width * 1.5, height: 300)
+        let id = try XCTUnwrap(store.addImage(data: XCTUnwrap(image.pngData()), name: "题目", to: page.id, at: original))
+        XCTAssertEqual(store.object(id: id, pageID: page.id)?.frame, original)
+        let moved = NoteRect(x: -400, y: page.height - 60, width: page.width * 2, height: 600)
+        XCTAssertTrue(store.updateObjectTransform(moved, rotation: .pi / 4, pageID: page.id, objectID: id))
+        let reopened = NotebookStore(folder: folder)
+        XCTAssertNil(reopened.storageError)
+        XCTAssertEqual(reopened.object(id: id, pageID: page.id)?.frame, moved)
+        XCTAssertNoThrow(try NotebookPageRenderer.checkedImage(page: XCTUnwrap(reopened.currentPage), store: reopened))
+        store.undo(); XCTAssertEqual(store.object(id: id, pageID: page.id)?.frame, original)
+        store.redo(); XCTAssertEqual(store.object(id: id, pageID: page.id)?.frame, moved)
+        XCTAssertFalse(store.updateObjectFrame(NoteRect(x: -.infinity, y: 0, width: 10, height: 10), pageID: page.id, objectID: id))
+    }
+
     func testNotebookAndPageCRUDOrderAndSelectionPersist() throws {
         let a = try XCTUnwrap(store.createNotebook(title: "数学", course: "高等数学"))
         let first = try XCTUnwrap(store.currentPage?.id)

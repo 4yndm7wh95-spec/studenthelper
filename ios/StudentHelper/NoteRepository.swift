@@ -133,13 +133,16 @@ struct NoteRepository {
                 for object in page.objects {
                     guard objectIDs.insert(object.id).inserted, object.frame.isFinite, object.angle.isFinite,
                           object.frame.width > 0, object.frame.height > 0,
-                          object.frame.x >= 0, object.frame.y >= 0,
-                          object.frame.x + object.frame.width <= page.width + 0.001,
-                          object.frame.y + object.frame.height <= page.height + 0.001 else {
+                          (object.frame.x + object.frame.width).isFinite,
+                          (object.frame.y + object.frame.height).isFinite,
+                          (object.frame.width + object.frame.height).isFinite else {
                         throw NoteStorageError.invalidGeometry
                     }
                     switch object.content {
                     case .text(let text):
+                        guard object.frame.x >= 0, object.frame.y >= 0,
+                              object.frame.x + object.frame.width <= page.width + 0.001,
+                              object.frame.y + object.frame.height <= page.height + 0.001 else { throw NoteStorageError.invalidGeometry }
                         guard text.fontSize.isFinite, (8...200).contains(text.fontSize) else { throw NoteStorageError.invalidGeometry }
                     case .image(let asset):
                         guard asset.width > 0, asset.height > 0, safeAssetName(asset.fileName, extension: "png") else {

@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 struct NotebookChatPanel<Content: View>: View {
     let available: CGSize
@@ -30,47 +31,30 @@ struct NotebookChatPanel<Content: View>: View {
             })
             .overlay(alignment: .top) {
                 Capsule().fill(Notebook.secondary.opacity(moving ? 0.7 : 0.3)).frame(width: 26, height: 3)
-                    .frame(width: 80, height: 18).contentShape(Rectangle()).offset(y: -6)
-                    .gesture(LongPressGesture(minimumDuration: 0.3, maximumDistance: 20)
-                        .sequenced(before: DragGesture(minimumDistance: 0, coordinateSpace: .global))
-                        .onChanged { value in
-                            if case .second(true, let drag) = value {
-                                if !moving { startOffset = boundedOffset; withAnimation(curve) { moving = true } }
-                                if let drag {
-                                    var transaction = Transaction(); transaction.disablesAnimations = true
-                                    withTransaction(transaction) { offset = CGSize(width: startOffset.width + drag.translation.width, height: startOffset.height + drag.translation.height) }
-                                }
-                            }
-                        }.onEnded { _ in withAnimation(curve) { offset = boundedOffset; moving = false } })
-                    .accessibilityLabel("长按移动聊天窗口").accessibilityIdentifier("chat-move-handle")
+                    .frame(width: 104, height: 44, alignment: .top).padding(.top, 6)
+                    .overlay {
+                        NotebookWindowGrip(label: "长按移动聊天窗口", identifier: "chat-move-handle",
+                            onBegin: { startOffset = boundedOffset; withAnimation(curve) { moving = true } },
+                            onChange: { delta in updateWithoutAnimation { offset = CGSize(width: startOffset.width + delta.width, height: startOffset.height + delta.height) } },
+                            onEnd: { withAnimation(curve) { offset = boundedOffset; moving = false } })
+                    }
             }
             .overlay(alignment: .topLeading) {
-                Image(systemName: "arrow.up.left.and.arrow.down.right")
-                    .font(.system(size: 10, weight: .medium)).foregroundStyle(Notebook.tertiary)
-                    .frame(width: 32, height: 32).contentShape(Rectangle()).offset(x: -8, y: -8)
+                Image(systemName: "arrow.up.left.and.arrow.down.right").font(.system(size: 10, weight: .medium)).foregroundStyle(Notebook.tertiary)
+                    .frame(width: 44, height: 44, alignment: .topLeading).padding(6)
                     .background { Circle().fill(Notebook.soft.opacity(resizing ? 1 : 0)).frame(width: 32, height: 32) }
-                    .gesture(LongPressGesture(minimumDuration: 0.3, maximumDistance: 20)
-                        .sequenced(before: DragGesture(minimumDistance: 0, coordinateSpace: .global))
-                        .onChanged { value in
-                            switch value {
-                            case .second(true, let drag):
-                                if !resizing {
-                                    startSize = CGSize(width: size.width, height: min(maximum.height, max(minimum.height, measuredHeight)))
-                                    withAnimation(curve) { resizing = true }
+                    .overlay {
+                        NotebookWindowGrip(label: "长按调整聊天窗口大小", identifier: "chat-resize-handle",
+                            onBegin: {
+                                startSize = CGSize(width: size.width, height: min(maximum.height, max(minimum.height, measuredHeight)))
+                                withAnimation(curve) { resizing = true }
+                            }, onChange: { delta in
+                                updateWithoutAnimation {
+                                    customSize = CGSize(width: min(maximum.width, max(minimum.width, startSize.width - delta.width)),
+                                                        height: min(maximum.height, max(minimum.height, startSize.height - delta.height)))
                                 }
-                                if let drag {
-                                    var transaction = Transaction(); transaction.disablesAnimations = true
-                                    withTransaction(transaction) {
-                                        customSize = CGSize(width: min(maximum.width, max(minimum.width, startSize.width - drag.translation.width)),
-                                                            height: min(maximum.height, max(minimum.height, startSize.height - drag.translation.height)))
-                                    }
-                                }
-                            default: break
-                            }
-                        }.onEnded { _ in withAnimation(curve) { resizing = false } })
-                    .accessibilityLabel("长按调整聊天窗口大小").accessibilityIdentifier("chat-resize-handle")
-                    .accessibilityAdjustableAction { direction in
-                        withAnimation(curve) { customSize = direction == .increment ? maximum : minimum }
+                            }, onEnd: { withAnimation(curve) { resizing = false } },
+                            onAdjust: { increase in withAnimation(curve) { customSize = increase ? maximum : minimum } })
                     }
             }
             .animation(curve, value: available)
@@ -80,9 +64,64 @@ struct NotebookChatPanel<Content: View>: View {
             .offset(boundedOffset)
             .onChange(of: available) { _, _ in if customSize != nil { withAnimation(curve) { customSize = size } } }
     }
+    private func updateWithoutAnimation(_ change: () -> Void) {
+        var transaction = Transaction(); transaction.disablesAnimations = true
+        withTransaction(transaction, change)
+    }
     private var boundedOffset: CGSize {
         CGSize(width: min(size.width / 2, max(-(available.width - size.width / 2), offset.width)),
                height: min(measuredHeight / 2, max(-(available.height - measuredHeight / 2), offset.height)))
     }
     private var curve: Animation? { reduced ? nil : .timingCurve(0.42, 0, 0.58, 1, duration: 0.42) }
+}
+
+private struct NotebookWindowGrip: UIViewRepresentable {
+    let label: String
+    let identifier: String
+    let onBegin: () -> Void
+    let onChange: (CGSize) -> Void
+    let onEnd: () -> Void
+    var onAdjust: ((Bool) -> Void)? = nil
+    func makeUIView(context: Context) -> GripView {
+        let view = GripView()
+        view.backgroundColor = .clear
+        view.isAccessibilityElement = true
+        view.accessibilityLabel = label
+        view.accessibilityIdentifier = identifier
+        let press = UILongPressGestureRecognizer(target: context.coordinator, action: #selector(Coordinator.handle(_:)))
+        press.minimumPressDuration = 0.3
+        press.allowableMovement = 44
+        press.allowedTouchTypes = [NSNumber(value: UITouch.TouchType.direct.rawValue)]
+        view.addGestureRecognizer(press)
+        updateUIView(view, context: context)
+        return view
+    }
+    func updateUIView(_ view: GripView, context: Context) {
+        context.coordinator.parent = self
+        view.onAdjust = onAdjust
+        view.accessibilityTraits = onAdjust == nil ? [] : .adjustable
+    }
+    func makeCoordinator() -> Coordinator { Coordinator(self) }
+    final class GripView: UIView {
+        var onAdjust: ((Bool) -> Void)?
+        override func accessibilityIncrement() { onAdjust?(true) }
+        override func accessibilityDecrement() { onAdjust?(false) }
+    }
+    final class Coordinator: NSObject {
+        var parent: NotebookWindowGrip
+        private var origin = CGPoint.zero
+        init(_ parent: NotebookWindowGrip) { self.parent = parent }
+        @objc func handle(_ gesture: UILongPressGestureRecognizer) {
+            guard let window = gesture.view?.window else { return }
+            let point = gesture.location(in: window)
+            switch gesture.state {
+            case .began: origin = point; parent.onBegin()
+            case .changed: parent.onChange(CGSize(width: point.x - origin.x, height: point.y - origin.y))
+            case .ended:
+                parent.onChange(CGSize(width: point.x - origin.x, height: point.y - origin.y)); parent.onEnd()
+            case .cancelled, .failed: parent.onEnd()
+            default: break
+            }
+        }
+    }
 }

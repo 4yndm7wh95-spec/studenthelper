@@ -69,6 +69,16 @@ struct NoteObject: Identifiable, Codable, Equatable {
         let h = CGFloat(abs(sin(angle))) * r.width + CGFloat(abs(cos(angle))) * r.height
         return CGRect(x: r.midX - w / 2, y: r.midY - h / 2, width: w, height: h)
     }
+    static func freeImageFrame(_ frame: NoteRect, rotation: Double = 0) throws -> NoteRect {
+        guard frame.isFinite, rotation.isFinite, frame.width > 0, frame.height > 0,
+              (frame.x + frame.width).isFinite, (frame.y + frame.height).isFinite,
+              (frame.width + frame.height).isFinite else { throw NoteStorageError.invalidGeometry }
+        return frame
+    }
+    func placedFrame(_ frame: NoteRect, rotation: Double, pageWidth: Double, pageHeight: Double) throws -> NoteRect {
+        if image != nil { return try Self.freeImageFrame(frame, rotation: rotation) }
+        return try Self.bounded(frame, rotation: rotation, pageWidth: pageWidth, pageHeight: pageHeight)
+    }
     static func bounded(_ frame: NoteRect, rotation: Double, pageWidth: Double, pageHeight: Double) throws -> NoteRect {
         guard rotation.isFinite else { throw NoteStorageError.invalidGeometry }
         let r = try frame.clamped(pageWidth: pageWidth, pageHeight: pageHeight)

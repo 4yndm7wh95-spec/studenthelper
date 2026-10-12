@@ -259,7 +259,7 @@ final class AppAutomation: ObservableObject {
             operationRegion = object.frame; try show(page: page, notebooks: notebooks)
             notebooks.updateText(try Self.string(args, "text", maximum: 8000), pageID: page.id, objectID: object.id)
         case .setObjectFrame:
-            let page = try Self.page(args, notebooks), object = try Self.noteObject(args, page), frame = try Self.rect(args["frame"], page: page)
+            let page = try Self.page(args, notebooks), object = try Self.noteObject(args, page), frame = try Self.rect(args["frame"], page: page, allowOverflow: object.image != nil)
             operationRegion = frame; try show(page: page, notebooks: notebooks)
             let rotation = try Self.optionalNumber(args, "rotation", range: -3600...3600).map { $0 * .pi / 180 } ?? object.angle
             guard notebooks.updateObjectTransform(frame, rotation: rotation, pageID: page.id, objectID: object.id) else { throw AppAutomationError.failed(notebooks.storageError ?? "位置未修改") }
@@ -270,7 +270,7 @@ final class AppAutomation: ObservableObject {
         case .addImage:
             let page = try Self.page(args, notebooks), data = try Self.imageData(args)
             guard page.objects.count < 2000 else { throw AppAutomationError.invalid("页面内容数量已达到上限") }
-            let frame = try Self.optionalRect(args["frame"], page: page)
+            let frame = args["frame"] == nil ? nil : try Self.rect(args["frame"], page: page, allowOverflow: true)
             operationRegion = frame; try show(page: page, notebooks: notebooks)
             guard let id = notebooks.addImage(data: data, name: try Self.string(args, "name", maximum: 160), to: page.id, at: frame) else { throw AppAutomationError.failed(notebooks.storageError ?? "图片未添加") }
             operationRegion = notebooks.object(id: id, pageID: page.id)?.frame; result["object_id"] = id.uuidString
@@ -632,8 +632,15 @@ final class AppAutomation: ObservableObject {
     static func noteObject(_ args: [String: Any], _ page: NotePage) throws -> NoteObject {
         guard let value = page.objects.first(where: { $0.id == (try? uuid(args, "object_id")) }) else { throw NoteStorageError.missingObject }; return value
     }
-    static func rect(_ value: Any?, page: NotePage) throws -> NoteRect {
+    static func rect(_ value: Any?, page: NotePage, allowOverflow: Bool = false) throws -> NoteRect {
         let args = try object(value, key: "frame"); try keys(args, allowed: ["x", "y", "width", "height"])
+        if allowOverflow {
+            let x = try number(args, "x", range: -Double.greatestFiniteMagnitude...Double.greatestFiniteMagnitude)
+            let y = try number(args, "y", range: -Double.greatestFiniteMagnitude...Double.greatestFiniteMagnitude)
+            let width = try number(args, "width", range: Double.leastNormalMagnitude...Double.greatestFiniteMagnitude)
+            let height = try number(args, "height", range: Double.leastNormalMagnitude...Double.greatestFiniteMagnitude)
+            return try NoteObject.freeImageFrame(NoteRect(x: x, y: y, width: width, height: height))
+        }
         let x = try number(args, "x", range: 0...page.width), y = try number(args, "y", range: 0...page.height)
         let width = try number(args, "width", range: 24...page.width), height = try number(args, "height", range: 24...page.height)
         guard x + width <= page.width, y + height <= page.height else { throw AppAutomationError.invalid("矩形超出纸张") }
