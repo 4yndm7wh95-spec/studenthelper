@@ -32,7 +32,7 @@ struct NotebookChatPanel<Content: View>: View {
                 Capsule().fill(Notebook.secondary.opacity(moving ? 0.7 : 0.3)).frame(width: 26, height: 3)
                     .frame(width: 80, height: 18).contentShape(Rectangle()).offset(y: -6)
                     .gesture(LongPressGesture(minimumDuration: 0.3, maximumDistance: 20)
-                        .sequenced(before: DragGesture(minimumDistance: 0))
+                        .sequenced(before: DragGesture(minimumDistance: 0, coordinateSpace: .global))
                         .onChanged { value in
                             if case .second(true, let drag) = value {
                                 if !moving { startOffset = boundedOffset; withAnimation(curve) { moving = true } }
@@ -50,7 +50,7 @@ struct NotebookChatPanel<Content: View>: View {
                     .frame(width: 32, height: 32).contentShape(Rectangle()).offset(x: -8, y: -8)
                     .background { Circle().fill(Notebook.soft.opacity(resizing ? 1 : 0)).frame(width: 32, height: 32) }
                     .gesture(LongPressGesture(minimumDuration: 0.3, maximumDistance: 20)
-                        .sequenced(before: DragGesture(minimumDistance: 0))
+                        .sequenced(before: DragGesture(minimumDistance: 0, coordinateSpace: .global))
                         .onChanged { value in
                             switch value {
                             case .second(true, let drag):
