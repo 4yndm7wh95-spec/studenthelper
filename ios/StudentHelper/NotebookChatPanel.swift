@@ -44,6 +44,7 @@ struct NotebookChatPanel<Content: View>: View {
     @State private var measuredHeight: CGFloat = 190
     @State private var keyboardFrame: CGRect?
     @State private var keyboardManuallyPositioned = false
+    @State private var keyboardManuallySized = false
 
     private var size: CGSize { customSize ?? CGSize(width: min(370, available.width), height: 190) }
     var body: some View {
@@ -84,11 +85,11 @@ struct NotebookChatPanel<Content: View>: View {
             let local = window?.convert(frame, from: nil) ?? frame
             let duration = note.userInfo?[UIResponder.keyboardAnimationDurationUserInfoKey] as? Double ?? 0.35
             withAnimation(reduced ? nil : .timingCurve(0.42, 0, 0.58, 1, duration: duration)) {
-                keyboardFrame = local; keyboardManuallyPositioned = false
+                keyboardFrame = local; keyboardManuallyPositioned = false; keyboardManuallySized = false
             }
         }
         .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillHideNotification)) { _ in
-            withAnimation(curve) { keyboardFrame = nil; keyboardManuallyPositioned = false }
+            withAnimation(curve) { keyboardFrame = nil; keyboardManuallyPositioned = false; keyboardManuallySized = false }
         }
         .accessibilityElement(children: .contain).accessibilityIdentifier("notebook-floating-window")
     }
@@ -97,7 +98,9 @@ struct NotebookChatPanel<Content: View>: View {
             onBegin: {
                 startSize = CGSize(width: size.width, height: measuredHeight)
                 startOffset = displayOffset
+                customSize = startSize
                 keyboardManuallyPositioned = true
+                keyboardManuallySized = true
                 offset = startOffset
                 withAnimation(curve) { resizing = true }
             }, onChange: { delta in
@@ -121,7 +124,7 @@ struct NotebookChatPanel<Content: View>: View {
         withTransaction(transaction, change)
     }
     private var keyboardSpace: CGFloat? {
-        guard !keyboardManuallyPositioned, let keyboardFrame, keyboardFrame.width >= viewport.width * 0.6,
+        guard !keyboardManuallySized, let keyboardFrame, keyboardFrame.width >= viewport.width * 0.6,
               keyboardFrame.intersects(viewport) else { return nil }
         return max(190, keyboardFrame.minY - viewport.minY - 24)
     }
@@ -130,7 +133,7 @@ struct NotebookChatPanel<Content: View>: View {
         return min(customSize == nil ? max(190, measuredHeight) : size.height, keyboardSpace)
     }
     private var displayOffset: CGSize {
-        guard keyboardSpace != nil, let keyboardFrame else { return offset }
+        guard !keyboardManuallyPositioned, keyboardSpace != nil, let keyboardFrame else { return offset }
         let lift = max(0, viewport.maxY - keyboardFrame.minY)
         return CGSize(width: offset.width, height: max(displayHeight - available.height, min(offset.height, -lift)))
     }

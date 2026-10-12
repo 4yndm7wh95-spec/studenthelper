@@ -97,6 +97,10 @@ import UIKit
         XCTAssertEqual(app.descendants(matching: .any).matching(identifier: "notebook-canvas").firstMatch.frame.height, paperFrame.height, accuracy: 2)
         XCTAssertLessThanOrEqual(question.frame.maxY, app.keyboards.firstMatch.frame.minY + 2)
         capture(app, "iPadKeyboardWithoutPaperCompression")
+        let keyboardWindowSize = window.frame.size
+        let keyboardMove = window.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0)).withOffset(CGVector(dx: 0, dy: 26))
+        keyboardMove.press(forDuration: 0.5, thenDragTo: keyboardMove.withOffset(CGVector(dx: -15, dy: 10)))
+        XCTAssertEqual(window.frame.height, keyboardWindowSize.height, accuracy: 2, "Dragging with the keyboard open must not restore a taller window mid-gesture")
         app.buttons["关闭"].tap()
         app.buttons["ask-notebook"].tap()
 
