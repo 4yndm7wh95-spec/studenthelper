@@ -46,9 +46,9 @@ struct NotebookChatPanel<Content: View>: View {
                     .frame(maxWidth: .infinity).frame(height: 44)
                 Color.clear.frame(width: 44, height: 44).allowsHitTesting(false)
             }
-            content(CGSize(width: size.width, height: max(150, size.height - 44)), customSize != nil)
+            content(CGSize(width: size.width, height: max(150, displayHeight - 44)), customSize != nil || keyboardSpace != nil)
         }
-            .frame(width: size.width, height: customSize == nil ? nil : size.height, alignment: .top)
+            .frame(width: size.width, height: customSize == nil && keyboardSpace == nil ? nil : displayHeight, alignment: .top)
             .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 22))
             .background(GeometryReader { geometry in
                 Color.clear.onAppear { measuredHeight = geometry.size.height }
@@ -92,11 +92,20 @@ struct NotebookChatPanel<Content: View>: View {
         var transaction = Transaction(); transaction.disablesAnimations = true
         withTransaction(transaction, change)
     }
-    private var displayOffset: CGSize {
+    private var keyboardSpace: CGFloat? {
         guard let keyboardFrame, keyboardFrame.width >= viewport.width * 0.6,
-              keyboardFrame.intersects(viewport) else { return boundedOffset }
-        let lift = max(0, viewport.maxY - 12 - keyboardFrame.minY + 12)
-        return CGSize(width: boundedOffset.width, height: min(boundedOffset.height, -lift))
+              keyboardFrame.intersects(viewport) else { return nil }
+        return max(minimum.height, keyboardFrame.minY - viewport.minY - 24)
+    }
+    private var displayHeight: CGFloat {
+        guard let keyboardSpace else { return size.height }
+        return min(customSize == nil ? max(minimum.height, measuredHeight) : size.height, keyboardSpace)
+    }
+    private var displayOffset: CGSize {
+        guard keyboardSpace != nil, let keyboardFrame else { return boundedOffset }
+        let lift = max(0, viewport.maxY - keyboardFrame.minY)
+        return CGSize(width: boundedOffset.width,
+                      height: max(displayHeight - available.height, min(boundedOffset.height, -lift)))
     }
     private var boundedOffset: CGSize {
         CGSize(width: min(size.width / 2, max(-(available.width - size.width / 2), offset.width)),
