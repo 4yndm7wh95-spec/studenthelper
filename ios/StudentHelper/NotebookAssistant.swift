@@ -454,7 +454,7 @@ struct NotebookAssistantView: View {
                             .foregroundStyle(Notebook.onAccent).background(Notebook.accent, in: Circle())
                     }.buttonStyle(NotebookIconMotion()).accessibilityLabel("问一步")
                         .disabled(model.question.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || (selectingRegion && model.selectedRegion == nil))
-                }
+                }.padding(.leading, onClose == nil ? 0 : 32)
             }
         }.frame(height: panelSize.map { max(150, $0.height - 24) }).padding(12).foregroundStyle(Notebook.secondary)
             .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 22))

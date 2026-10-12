@@ -349,7 +349,7 @@ private struct NotebookEditorView: View {
                 }
                 if assistant, let assistantID = assistantPageID ?? page?.id, store.page(id: assistantID) != nil {
                     VStack { Spacer(minLength: 0); HStack { Spacer(minLength: 0)
-                        NotebookChatPanel(available: CGSize(width: max(1, geometry.size.width - 24), height: max(1, geometry.size.height - 24))) { panelSize, manualSize in
+                        NotebookChatPanel(available: CGSize(width: max(1, geometry.size.width - 24), height: max(1, geometry.size.height - 24)), viewport: geometry.frame(in: .global)) { panelSize, manualSize in
                             NotebookAssistantView(notebookID: notebookID, pageID: assistantID, availableHeight: manualSize ? panelSize.height : geometry.size.height * 0.75,
                                 panelSize: manualSize ? panelSize : nil, onClose: { assistant = false })
                         }.id(assistantID)
@@ -362,6 +362,7 @@ private struct NotebookEditorView: View {
 
     private var editorNavigation: some View {
         editorSurface
+        .ignoresSafeArea(.keyboard, edges: .bottom)
         .navigationTitle(book?.title ?? "笔记本")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {

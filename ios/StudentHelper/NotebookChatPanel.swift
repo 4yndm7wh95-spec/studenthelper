@@ -1,7 +1,9 @@
 import SwiftUI
+import UIKit
 
 struct NotebookChatPanel<Content: View>: View {
     let available: CGSize
+    let viewport: CGRect
     let content: (CGSize, Bool) -> Content
     @Environment(\.accessibilityReduceMotion) private var reduced
     @State private var customSize: CGSize?
@@ -11,6 +13,7 @@ struct NotebookChatPanel<Content: View>: View {
     @State private var startOffset = CGSize.zero
     @State private var moving = false
     @State private var measuredHeight: CGFloat = 190
+    @State private var keyboardFrame: CGRect?
 
     private var minimum: CGSize { CGSize(width: min(370, available.width), height: min(190, available.height)) }
     private var maximum: CGSize {
@@ -55,13 +58,45 @@ struct NotebookChatPanel<Content: View>: View {
             .animation(curve, value: resizing)
             .animation(curve, value: moving)
             .shadow(color: .black.opacity(moving ? 0.16 : 0), radius: 20, y: 8)
-            .offset(boundedOffset)
+            .overlay(alignment: .bottomLeading) {
+                NotebookWindowGrip(label: "调整聊天窗口大小", identifier: "chat-resize-bottom-left",
+                    onBegin: {
+                        startSize = CGSize(width: size.width, height: min(maximum.height, max(minimum.height, measuredHeight)))
+                        startOffset = boundedOffset
+                        withAnimation(curve) { resizing = true }
+                    }, onChange: { delta in
+                        updateWithoutAnimation {
+                            let height = min(maximum.height, max(minimum.height, startSize.height + delta.height))
+                            customSize = CGSize(width: min(maximum.width, max(minimum.width, startSize.width - delta.width)), height: height)
+                            offset = CGSize(width: startOffset.width, height: startOffset.height + height - startSize.height)
+                        }
+                    }, onEnd: { withAnimation(curve) { offset = boundedOffset; resizing = false } },
+                    onAdjust: { increase in withAnimation(curve) { customSize = increase ? maximum : minimum } }, symbol: "arrow.down.left.and.arrow.up.right", active: resizing)
+                    .frame(width: 44, height: 44)
+            }
+            .offset(displayOffset)
+            .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillChangeFrameNotification)) { note in
+                guard let frame = note.userInfo?[UIResponder.keyboardFrameEndUserInfoKey] as? CGRect else { return }
+                let window = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.flatMap(\.windows).first { $0.isKeyWindow }
+                let local = window?.convert(frame, from: nil) ?? frame
+                let duration = note.userInfo?[UIResponder.keyboardAnimationDurationUserInfoKey] as? Double ?? 0.35
+                withAnimation(reduced ? nil : .timingCurve(0.42, 0, 0.58, 1, duration: duration)) { keyboardFrame = local }
+            }
+            .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillHideNotification)) { _ in
+                withAnimation(curve) { keyboardFrame = nil }
+            }
             .accessibilityElement(children: .contain).accessibilityIdentifier("notebook-floating-window")
             .onChange(of: available) { _, _ in if customSize != nil { withAnimation(curve) { customSize = size } } }
     }
     private func updateWithoutAnimation(_ change: () -> Void) {
         var transaction = Transaction(); transaction.disablesAnimations = true
         withTransaction(transaction, change)
+    }
+    private var displayOffset: CGSize {
+        guard let keyboardFrame, keyboardFrame.width >= viewport.width * 0.6,
+              keyboardFrame.intersects(viewport) else { return boundedOffset }
+        let lift = max(0, viewport.maxY - 12 - keyboardFrame.minY + 12)
+        return CGSize(width: boundedOffset.width, height: min(boundedOffset.height, -lift))
     }
     private var boundedOffset: CGSize {
         CGSize(width: min(size.width / 2, max(-(available.width - size.width / 2), offset.width)),

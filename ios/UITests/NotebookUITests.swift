@@ -64,6 +64,13 @@ import UIKit
         moveStart.press(forDuration: 0.05, thenDragTo: moveStart.withOffset(CGVector(dx: -100, dy: -160)))
         XCTAssertLessThan(chat.frame.minX, initialPosition.x - 50)
         XCTAssertLessThan(chat.frame.minY, initialPosition.y - 80)
+        let bottomGrip = app.descendants(matching: .any).matching(identifier: "chat-resize-bottom-left").firstMatch
+        XCTAssertTrue(bottomGrip.exists)
+        let smallSize = window.frame.size
+        let bottomStart = bottomGrip.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
+        bottomStart.press(forDuration: 0.5, thenDragTo: bottomStart.withOffset(CGVector(dx: -50, dy: 60)))
+        XCTAssertGreaterThan(window.frame.width, smallSize.width + 20)
+        XCTAssertGreaterThan(window.frame.height, smallSize.height + 20)
         let initialSize = chat.frame.size
         let resize = app.descendants(matching: .any).matching(identifier: "chat-resize-handle").firstMatch
         XCTAssertTrue(resize.exists)
@@ -74,6 +81,16 @@ import UIKit
         XCTAssertLessThanOrEqual(chat.frame.width, app.frame.width * 0.75 + 1)
         XCTAssertLessThanOrEqual(chat.frame.height, app.frame.height * 0.75 + 1)
         capture(app, "iPadResizableChat")
+        let paperFrame = app.descendants(matching: .any).matching(identifier: "notebook-canvas").firstMatch.frame
+        let question = app.descendants(matching: .any).matching(identifier: "notebook-question").firstMatch
+        question.tap()
+        XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 5))
+        XCTAssertEqual(app.descendants(matching: .any).matching(identifier: "notebook-canvas").firstMatch.frame.height, paperFrame.height, accuracy: 2)
+        XCTAssertLessThanOrEqual(question.frame.maxY, app.keyboards.firstMatch.frame.minY + 2)
+        capture(app, "iPadKeyboardWithoutPaperCompression")
+        app.buttons["关闭"].tap()
+        app.buttons["ask-notebook"].tap()
+
         XCTAssertTrue(app.descendants(matching: .any)["notebook-question"].exists)
         XCTAssertFalse(app.buttons["问一步"].isEnabled, "An empty question must not send a model request")
         capture(app, "iPadNotebookAssistant")
