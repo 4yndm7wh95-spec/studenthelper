@@ -88,6 +88,16 @@ struct NotebookButton: ButtonStyle {
     }
 }
 
+struct NotebookIconMotion: ButtonStyle {
+    @Environment(\.accessibilityReduceMotion) private var reduced
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .scaleEffect(configuration.isPressed ? 0.93 : 1)
+            .opacity(configuration.isPressed ? 0.72 : 1)
+            .animation(reduced ? nil : .timingCurve(0.42, 0, 0.58, 1, duration: 0.22), value: configuration.isPressed)
+    }
+}
+
 struct EmptyNotebook: View {
     var symbol: String
     var title: String

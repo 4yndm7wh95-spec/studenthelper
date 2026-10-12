@@ -61,6 +61,26 @@ struct NoteObject: Identifiable, Codable, Equatable {
     var id = UUID()
     var frame: NoteRect
     var content: NoteObjectContent
+    var rotation: Double? = nil
+    var angle: Double { rotation ?? 0 }
+    var rotatedBounds: CGRect {
+        let r = frame.cgRect
+        let w = CGFloat(abs(cos(angle))) * r.width + CGFloat(abs(sin(angle))) * r.height
+        let h = CGFloat(abs(sin(angle))) * r.width + CGFloat(abs(cos(angle))) * r.height
+        return CGRect(x: r.midX - w / 2, y: r.midY - h / 2, width: w, height: h)
+    }
+    static func bounded(_ frame: NoteRect, rotation: Double, pageWidth: Double, pageHeight: Double) throws -> NoteRect {
+        guard rotation.isFinite else { throw NoteStorageError.invalidGeometry }
+        let r = try frame.clamped(pageWidth: pageWidth, pageHeight: pageHeight)
+        let w = abs(cos(rotation)) * r.width + abs(sin(rotation)) * r.height
+        let h = abs(sin(rotation)) * r.width + abs(cos(rotation)) * r.height
+        let scale = min(1, min(pageWidth / max(1, w), pageHeight / max(1, h)))
+        let marginX = max(w, r.width) * scale / 2
+        let cx = min(max(marginX, r.x + r.width / 2), pageWidth - marginX)
+        let marginY = max(h, r.height) * scale / 2
+        let cy = min(max(marginY, r.y + r.height / 2), pageHeight - marginY)
+        return NoteRect(x: cx - r.width * scale / 2, y: cy - r.height * scale / 2, width: r.width * scale, height: r.height * scale)
+    }
     var text: String? { if case .text(let value) = content { return value.text }; return nil }
     var image: NoteImageAsset? { if case .image(let asset) = content { return asset }; return nil }
 }
@@ -121,6 +141,7 @@ enum NoteAction: Equatable {
     case addText(pageID: UUID, text: String, frame: NoteRect)
     case updateText(pageID: UUID, objectID: UUID, text: String)
     case setObjectFrame(pageID: UUID, objectID: UUID, frame: NoteRect)
+    case setObjectTransform(pageID: UUID, objectID: UUID, frame: NoteRect, rotation: Double)
     case deleteObject(pageID: UUID, objectID: UUID)
 }
 

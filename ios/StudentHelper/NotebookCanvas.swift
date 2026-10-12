@@ -55,8 +55,8 @@ struct NotebookCanvas: UIViewRepresentable {
         host.pageView.canvas.delegate = context.coordinator
         host.pageView.canvas.onUndo = { [weak coordinator = context.coordinator] in coordinator?.undo() }
         host.pageView.canvas.onRedo = { [weak coordinator = context.coordinator] in coordinator?.redo() }
-        host.pageView.selection.onCommitFrame = { [weak coordinator = context.coordinator] objectID, rect in
-            coordinator?.commitObjectFrame(objectID: objectID, rect: rect)
+        host.pageView.selection.onCommitTransform = { [weak coordinator = context.coordinator] objectID, rect, angle in
+            coordinator?.commitObjectFrame(objectID: objectID, rect: rect, angle: angle)
         }
         host.pageView.selection.onDelete = { [weak coordinator = context.coordinator] objectID in
             coordinator?.deleteObject(objectID)
@@ -65,8 +65,8 @@ struct NotebookCanvas: UIViewRepresentable {
             coordinator?.editObject(objectID)
         }
         host.pageView.selection.onGestureBegan = { [weak coordinator = context.coordinator] in _ = coordinator?.flushDrawing() }
-        host.pageView.selection.onPreviewFrame = { [weak host] objectID, rect in
-            host?.pageView.previewFrame(rect, objectID: objectID)
+        host.pageView.selection.onPreviewTransform = { [weak host] objectID, rect, angle in
+            host?.pageView.previewFrame(rect, angle: angle, objectID: objectID)
         }
         context.coordinator.update(parent: self)
         return host
@@ -362,11 +362,11 @@ struct NotebookCanvas: UIViewRepresentable {
             notifyUndoState()
         }
 
-        func commitObjectFrame(objectID: UUID, rect: CGRect) {
+        func commitObjectFrame(objectID: UUID, rect: CGRect, angle: CGFloat) {
             guard let pageID = loadedPageID else { return }
             if flushDrawing() {
                 endDrawingGroup()
-                _ = parent.store.updateObjectFrame(NoteRect(rect), pageID: pageID, objectID: objectID)
+                _ = parent.store.updateObjectTransform(NoteRect(rect), rotation: Double(angle), pageID: pageID, objectID: objectID)
             }
             // Reconcile the preview even if disk storage rejected the edit.
             if let page = parent.store.page(id: pageID) { host?.pageView.update(page: page, store: parent.store) }
@@ -588,10 +588,17 @@ final class NotebookPageSurface: UIView {
     }
 
     func update(page: NotePage, store: NotebookStore) {
-        paper.paper = page.paper
+        if paper.paper != page.paper {
+            UIView.transition(with: paper, duration: UIAccessibility.isReduceMotionEnabled ? 0 : 0.4,
+                              options: [.transitionCrossDissolve, .curveEaseInOut, .allowAnimatedContent]) { self.paper.paper = page.paper }
+        }
         let ids = Set(page.objects.map(\.id))
         for id in Array(objectViews.keys) where !ids.contains(id) {
-            objectViews.removeValue(forKey: id)?.removeFromSuperview()
+            if let outgoing = objectViews.removeValue(forKey: id) {
+                UIView.animate(withDuration: UIAccessibility.isReduceMotionEnabled ? 0 : 0.3, delay: 0, options: [.curveEaseInOut, .beginFromCurrentState]) {
+                    outgoing.alpha = 0
+                } completion: { _ in outgoing.removeFromSuperview() }
+            }
         }
         for object in page.objects {
             let view: UIView
@@ -611,15 +618,29 @@ final class NotebookPageSurface: UIView {
                 objectViews[object.id]?.removeFromSuperview()
                 objectViews[object.id] = view
                 objectLayer.addSubview(view)
+                view.alpha = 0
+                UIView.animate(withDuration: UIAccessibility.isReduceMotionEnabled ? 0 : 0.38, delay: 0, options: [.curveEaseInOut]) { view.alpha = 1 }
             }
             objectLayer.bringSubviewToFront(view)
-            view.frame = object.frame.cgRect
+            let r = object.frame.cgRect
+            let changes = {
+                view.bounds = CGRect(origin: .zero, size: r.size)
+                view.center = CGPoint(x: r.midX, y: r.midY)
+                view.transform = CGAffineTransform(rotationAngle: CGFloat(object.angle))
+            }
+            if view.bounds.isEmpty || UIAccessibility.isReduceMotionEnabled { changes() }
+            else { UIView.animate(withDuration: 0.38, delay: 0, options: [.curveEaseInOut, .beginFromCurrentState, .allowUserInteraction], animations: changes) }
         }
         objects = page.objects
         selection.update(objects: page.objects)
     }
 
-    func previewFrame(_ frame: CGRect, objectID: UUID) { objectViews[objectID]?.frame = frame }
+    func previewFrame(_ frame: CGRect, angle: CGFloat, objectID: UUID) {
+        guard let view = objectViews[objectID] else { return }
+        view.bounds = CGRect(origin: .zero, size: frame.size)
+        view.center = CGPoint(x: frame.midX, y: frame.midY)
+        view.transform = CGAffineTransform(rotationAngle: angle)
+    }
 
     func showOperationRegion(_ region: NoteRect?) {
         CATransaction.begin(); CATransaction.setDisableActions(true)
@@ -651,8 +672,8 @@ final class NotebookTextObjectView: UIView {
 @MainActor
 final class NotebookObjectSelection: UIView, UIGestureRecognizerDelegate {
     var allowsObjectSelection = false { didSet { refreshSelection() } }
-    var onCommitFrame: ((UUID, CGRect) -> Void)?
-    var onPreviewFrame: ((UUID, CGRect) -> Void)?
+    var onCommitTransform: ((UUID, CGRect, CGFloat) -> Void)?
+    var onPreviewTransform: ((UUID, CGRect, CGFloat) -> Void)?
     var onDelete: ((UUID) -> Void)?
     var onEdit: ((UUID) -> Void)?
     var onGestureBegan: (() -> Void)?
@@ -660,11 +681,15 @@ final class NotebookObjectSelection: UIView, UIGestureRecognizerDelegate {
     private var selectedID: UUID?
     private var previewRect: CGRect?
     private var startingRect: CGRect?
+    private var startingAngle: CGFloat = 0
+    private var previewAngle: CGFloat?
+    private var startingPoint = CGPoint.zero
     private var resizing = false
+    private var chromeVisible = false
     private let outline = CAShapeLayer()
     private let deleteButton = UIButton(type: .system)
     private let editButton = UIButton(type: .system)
-    private let resizeHandle = UIView()
+    private let resizeHandle = UIButton(type: .system)
     private lazy var moveGesture = UIPanGestureRecognizer(target: self, action: #selector(panObject))
 
     override init(frame: CGRect) {
@@ -698,6 +723,12 @@ final class NotebookObjectSelection: UIView, UIGestureRecognizerDelegate {
         moveGesture.allowedTouchTypes = [NSNumber(value: UITouch.TouchType.direct.rawValue)]
         moveGesture.delegate = self
         addGestureRecognizer(moveGesture)
+        resizeHandle.setImage(UIImage(systemName: "arrow.up.left.and.arrow.down.right"), for: .normal)
+        resizeHandle.tintColor = .white
+        resizeHandle.isUserInteractionEnabled = false
+        resizeHandle.isAccessibilityElement = true
+        resizeHandle.accessibilityLabel = "缩放和旋转图片"
+        resizeHandle.accessibilityIdentifier = "image-transform-handle"
         refreshSelection()
     }
 
@@ -722,30 +753,60 @@ final class NotebookObjectSelection: UIView, UIGestureRecognizerDelegate {
 
     func select(_ id: UUID?) {
         selectedID = id
-        previewRect = nil
+        previewRect = nil; previewAngle = nil
         refreshSelection()
     }
 
     func refreshSelection() {
         guard allowsObjectSelection, let object = selectedObject else {
-            outline.path = nil
-            deleteButton.isHidden = true
-            editButton.isHidden = true
-            resizeHandle.isHidden = true
+            setChromeVisible(false)
             return
         }
+        setChromeVisible(true)
         let rect = previewRect ?? object.frame.cgRect
-        outline.path = UIBezierPath(rect: rect.insetBy(dx: -2, dy: -2)).cgPath
-        deleteButton.isHidden = false
-        resizeHandle.isHidden = false
+        let angle = previewAngle ?? CGFloat(object.angle)
+        let transform = CGAffineTransform(translationX: rect.midX, y: rect.midY).rotated(by: angle)
+        let path = UIBezierPath(rect: CGRect(x: -rect.width / 2 - 2, y: -rect.height / 2 - 2, width: rect.width + 4, height: rect.height + 4))
+        path.apply(transform)
+        CATransaction.begin(); CATransaction.setDisableActions(true); outline.path = path.cgPath; CATransaction.commit()
         editButton.isHidden = object.text == nil
-        deleteButton.frame = CGRect(x: min(max(0, rect.maxX - 16), max(0, bounds.width - 32)), y: max(0, rect.minY - 16), width: 32, height: 32)
-        editButton.frame = CGRect(x: max(0, rect.minX - 16), y: max(0, rect.minY - 16), width: 32, height: 32)
-        resizeHandle.frame = CGRect(x: min(max(0, rect.maxX - 14), max(0, bounds.width - 28)), y: min(max(0, rect.maxY - 14), max(0, bounds.height - 28)), width: 28, height: 28)
+        func corner(_ x: CGFloat, _ y: CGFloat) -> CGPoint { CGPoint(x: x, y: y).applying(transform) }
+        let close = corner(rect.width / 2, -rect.height / 2)
+        let edit = corner(-rect.width / 2, -rect.height / 2)
+        let grip = corner(rect.width / 2, rect.height / 2)
+        deleteButton.frame = CGRect(x: close.x - 16, y: close.y - 16, width: 32, height: 32)
+        editButton.frame = CGRect(x: edit.x - 16, y: edit.y - 16, width: 32, height: 32)
+        resizeHandle.frame = CGRect(x: grip.x - 18, y: grip.y - 18, width: 36, height: 36)
+        resizeHandle.layer.cornerRadius = 18
+
+    }
+
+    private func setChromeVisible(_ visible: Bool) {
+        guard chromeVisible != visible else {
+            if !visible { deleteButton.isHidden = true; editButton.isHidden = true; resizeHandle.isHidden = true; outline.opacity = 0 }
+            return
+        }
+        chromeVisible = visible
+        let views: [UIView] = [deleteButton, editButton, resizeHandle]
+        if visible { views.forEach { $0.isHidden = false; $0.alpha = 0 } }
+        let fade = CABasicAnimation(keyPath: "opacity")
+        fade.fromValue = outline.presentation()?.opacity ?? outline.opacity; fade.toValue = visible ? 1 : 0
+        fade.duration = UIAccessibility.isReduceMotionEnabled ? 0 : 0.32
+        fade.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+        outline.opacity = visible ? 1 : 0; outline.add(fade, forKey: "selection-fade")
+        UIView.animate(withDuration: UIAccessibility.isReduceMotionEnabled ? 0 : 0.32, delay: 0, options: [.curveEaseInOut, .beginFromCurrentState, .allowUserInteraction]) {
+            views.forEach { $0.alpha = visible ? 1 : 0 }
+        } completion: { [weak self] _ in
+            if self?.chromeVisible == false { views.forEach { $0.isHidden = true } }
+        }
     }
 
     private var selectedObject: NoteObject? { objects.first(where: { $0.id == selectedID }) }
-    private func object(at point: CGPoint) -> NoteObject? { objects.reversed().first(where: { $0.frame.cgRect.contains(point) }) }
+    private func object(at point: CGPoint) -> NoteObject? { objects.reversed().first(where: { object in
+        let r = object.frame.cgRect
+        let local = CGPoint(x: point.x - r.midX, y: point.y - r.midY).applying(CGAffineTransform(rotationAngle: -CGFloat(object.angle)))
+        return CGRect(x: -r.width / 2, y: -r.height / 2, width: r.width, height: r.height).contains(local)
+    }) }
 
     override func hitTest(_ point: CGPoint, with event: UIEvent?) -> UIView? {
         guard isUserInteractionEnabled, allowsObjectSelection, bounds.contains(point) else { return nil }
@@ -781,53 +842,41 @@ final class NotebookObjectSelection: UIView, UIGestureRecognizerDelegate {
             resizing = selectedObject != nil && resizeHandle.frame.insetBy(dx: -10, dy: -10).contains(point)
             if !resizing, let object = object(at: point) { select(object.id) }
             guard let object = selectedObject else { return }
-            onGestureBegan?()
-            startingRect = object.frame.cgRect
-            previewRect = startingRect
-        case .changed:
-            guard let object = selectedObject, let startingRect else { return }
-            let translation = gesture.translation(in: self)
-            let rect = adjusted(startingRect, translation: translation, preserveAspect: object.image != nil)
-            previewRect = rect
-            onPreviewFrame?(object.id, rect)
-            refreshSelection()
-        case .ended:
-            guard let object = selectedObject, let startingRect else { return }
-            let rect = adjusted(startingRect, translation: gesture.translation(in: self), preserveAspect: object.image != nil)
-            self.startingRect = nil
-            previewRect = nil
-            onPreviewFrame?(object.id, rect)
-            if rect != startingRect { onCommitFrame?(object.id, rect) }
-            refreshSelection()
+            onGestureBegan?(); startingRect = object.frame.cgRect; startingAngle = CGFloat(object.angle)
+            startingPoint = point; previewRect = startingRect; previewAngle = startingAngle
+        case .changed, .ended:
+            guard let object = selectedObject, let original = startingRect else { return }
+            var rect = original, angle = startingAngle
+            if resizing, object.image != nil {
+                let center = CGPoint(x: original.midX, y: original.midY)
+                let start = CGPoint(x: startingPoint.x - center.x, y: startingPoint.y - center.y)
+                let current = CGPoint(x: point.x - center.x, y: point.y - center.y)
+                let ratio = max(max(48 / original.width, 48 / original.height), hypot(current.x, current.y) / max(1, hypot(start.x, start.y)))
+                angle += atan2(current.y, current.x) - atan2(start.y, start.x)
+                rect = CGRect(x: center.x - original.width * ratio / 2, y: center.y - original.height * ratio / 2, width: original.width * ratio, height: original.height * ratio)
+            } else if resizing {
+                let move = gesture.translation(in: self)
+                rect.size = CGSize(width: max(48, original.width + move.x), height: max(48, original.height + move.y))
+            } else {
+                let move = gesture.translation(in: self)
+                rect.origin = CGPoint(x: original.minX + move.x, y: original.minY + move.y)
+            }
+            guard let bounded = try? NoteObject.bounded(NoteRect(rect), rotation: Double(angle), pageWidth: Double(bounds.width), pageHeight: Double(bounds.height)) else { return }
+            rect = bounded.cgRect; previewRect = rect; previewAngle = angle
+            onPreviewTransform?(object.id, rect, angle); refreshSelection()
+            if gesture.state == .ended {
+                self.startingRect = nil; previewRect = nil; previewAngle = nil
+                if rect != original || angle != startingAngle { onCommitTransform?(object.id, rect, angle) }
+                refreshSelection()
+            }
         case .cancelled, .failed:
-            if let selectedID, let startingRect { onPreviewFrame?(selectedID, startingRect) }
-            startingRect = nil
-            previewRect = nil
-            refreshSelection()
+            if let id = selectedID, let original = startingRect { onPreviewTransform?(id, original, startingAngle) }
+            startingRect = nil; previewRect = nil; previewAngle = nil; refreshSelection()
         default: break
         }
     }
-
-    private func adjusted(_ original: CGRect, translation: CGPoint, preserveAspect: Bool) -> CGRect {
-        if !resizing {
-            return CGRect(x: min(max(0, original.minX + translation.x), max(0, bounds.width - original.width)),
-                          y: min(max(0, original.minY + translation.y), max(0, bounds.height - original.height)),
-                          width: original.width, height: original.height)
-        }
-        let maxWidth = max(24, bounds.width - original.minX)
-        let maxHeight = max(24, bounds.height - original.minY)
-        var width = min(maxWidth, max(48, original.width + translation.x))
-        var height = min(maxHeight, max(48, original.height + translation.y))
-        if preserveAspect {
-            let ratio = max(0.01, original.width / max(1, original.height))
-            width = min(width, maxHeight * ratio)
-            height = width / ratio
-        }
-        return CGRect(x: original.minX, y: original.minY, width: width, height: height)
-    }
 }
 
-@MainActor
 enum NotebookPageRenderer {
     static func image(page: NotePage, store: NotebookStore, scale: CGFloat = 1) -> UIImage {
         NotificationCenter.default.post(name: .notebookFlushDrawing, object: nil)
@@ -853,10 +902,16 @@ enum NotebookPageRenderer {
         return UIGraphicsImageRenderer(size: page.size, format: format).image { output in
             drawPaper(page.paper, in: bounds, context: output.cgContext)
             for object in page.objects {
+                output.cgContext.saveGState()
+                let r = object.frame.cgRect
+                output.cgContext.translateBy(x: r.midX, y: r.midY)
+                output.cgContext.rotate(by: CGFloat(object.angle))
+                let local = CGRect(x: -r.width / 2, y: -r.height / 2, width: r.width, height: r.height)
                 switch object.content {
-                case .image(let asset): store.image(for: asset)?.draw(in: object.frame.cgRect)
-                case .text(let text): drawText(text, in: object.frame.cgRect)
+                case .image(let asset): store.image(for: asset)?.draw(in: local)
+                case .text(let text): drawText(text, in: local)
                 }
+                output.cgContext.restoreGState()
             }
             drawing.image(from: bounds, scale: format.scale).draw(in: bounds)
         }

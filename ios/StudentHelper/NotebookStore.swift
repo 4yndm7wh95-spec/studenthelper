@@ -158,6 +158,11 @@ final class NotebookStore: ObservableObject {
     }
 
     @discardableResult
+    func updateObjectTransform(_ frame: NoteRect, rotation: Double, pageID: UUID, objectID: UUID) -> Bool {
+        apply(.setObjectTransform(pageID: pageID, objectID: objectID, frame: frame, rotation: rotation)) != nil
+    }
+
+    @discardableResult
     func updateObjectFrame(_ frame: NoteRect, pageID: UUID, objectID: UUID) -> Bool {
         apply(.setObjectFrame(pageID: pageID, objectID: objectID, frame: frame)) != nil
     }
@@ -345,7 +350,7 @@ final class NotebookStore: ObservableObject {
             let pageID: UUID
             switch action {
             case .renamePage(let id, _), .setPaper(let id, _), .addText(let id, _, _),
-                 .updateText(let id, _, _), .setObjectFrame(let id, _, _), .deleteObject(let id, _): pageID = id
+                 .updateText(let id, _, _), .setObjectFrame(let id, _, _), .setObjectTransform(let id, _, _, _), .deleteObject(let id, _): pageID = id
             default: throw NoteStorageError.missingPage
             }
             let (n, p) = try location(of: pageID, in: next)
@@ -363,7 +368,13 @@ final class NotebookStore: ObservableObject {
                 value.text = text; next.notebooks[n].pages[p].objects[o].content = .text(value); objectID = id
             case .setObjectFrame(_, let id, let frame):
                 let page = next.notebooks[n].pages[p], o = try objectIndex(id, page: page)
-                next.notebooks[n].pages[p].objects[o].frame = try frame.clamped(pageWidth: page.width, pageHeight: page.height); objectID = id
+                next.notebooks[n].pages[p].objects[o].frame = try NoteObject.bounded(frame, rotation: page.objects[o].angle, pageWidth: page.width, pageHeight: page.height); objectID = id
+            case .setObjectTransform(_, let id, let frame, let rotation):
+                let page = next.notebooks[n].pages[p], o = try objectIndex(id, page: page)
+                let normalized = atan2(sin(rotation), cos(rotation))
+                guard rotation.isFinite else { throw NoteStorageError.invalidGeometry }
+                next.notebooks[n].pages[p].objects[o].frame = try NoteObject.bounded(frame, rotation: normalized, pageWidth: page.width, pageHeight: page.height)
+                next.notebooks[n].pages[p].objects[o].rotation = normalized; objectID = id
             case .deleteObject(_, let id):
                 let o = try objectIndex(id, page: next.notebooks[n].pages[p])
                 next.notebooks[n].pages[p].objects.remove(at: o); objectID = id

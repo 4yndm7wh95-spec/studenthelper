@@ -156,7 +156,7 @@ struct NotebooksView: View {
                 path.append(book.id)
             } label: {
                 NotebookCover(book: book)
-            }.buttonStyle(.plain)
+            }.buttonStyle(NotebookIconMotion())
                 .accessibilityLabel("打开笔记本：\(book.title)，\(book.pages.count) 页")
             HStack(spacing: 4) {
                 Text("\(book.pages.count) 页").font(.caption).foregroundStyle(Notebook.tertiary)
@@ -241,7 +241,7 @@ private struct NewNotebookSheet: View {
                                 Circle().fill(notebookHexColor(value)).frame(width: 30, height: 30)
                                     .overlay { if cover == value { Image(systemName: "checkmark").font(.caption.weight(.bold)).foregroundStyle(.white) } }
                                     .frame(width: 44, height: 44).contentShape(Rectangle())
-                            }.buttonStyle(.plain).accessibilityLabel(notebookColorName(value))
+                            }.buttonStyle(NotebookIconMotion()).accessibilityLabel(notebookColorName(value))
                                 .accessibilityAddTraits(cover == value ? .isSelected : [])
                         }
                     }
@@ -327,7 +327,10 @@ private struct NotebookEditorView: View {
         GeometryReader { geometry in
             let expanded = railOverride ?? false
             ZStack(alignment: .top) {
-                if let page { pageCanvas(page).ignoresSafeArea(edges: .bottom) }
+                if let page {
+                    pageCanvas(page).ignoresSafeArea(edges: .bottom)
+                        .transition(.asymmetric(insertion: .opacity.combined(with: .offset(x: 24)), removal: .opacity.combined(with: .offset(x: -24))))
+                }
                 else {
                     Button("添加页面") { addPage() }.buttonStyle(NotebookButton())
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -346,9 +349,11 @@ private struct NotebookEditorView: View {
                 }
                 if assistant, let assistantID = assistantPageID ?? page?.id, store.page(id: assistantID) != nil {
                     VStack { Spacer(minLength: 0); HStack { Spacer(minLength: 0)
-                        NotebookAssistantView(notebookID: notebookID, pageID: assistantID, availableHeight: geometry.size.height - 24, onClose: { assistant = false })
-                            .id(assistantID).frame(width: min(370, geometry.size.width - 24))
-                            .fixedSize(horizontal: false, vertical: true)
+                        NotebookChatPanel(available: CGSize(width: max(1, geometry.size.width - 24), height: max(1, geometry.size.height - 24))) { panelSize, manualSize in
+                            NotebookAssistantView(notebookID: notebookID, pageID: assistantID, availableHeight: manualSize ? panelSize.height : geometry.size.height * 0.75,
+                                panelSize: manualSize ? panelSize : nil, onClose: { assistant = false })
+                        }.id(assistantID)
+
                     } }.padding(12).transition(.opacity.combined(with: .scale(scale: 0.95, anchor: .bottomTrailing)))
                 }
             }.background(Notebook.paper)
@@ -441,6 +446,7 @@ private struct NotebookEditorView: View {
 
     var body: some View {
         editorPresentation
+        .buttonStyle(NotebookIconMotion())
         .alert("无法插入图片", isPresented: Binding(get: { importError != nil }, set: { if !$0 { importError = nil } })) {
             Button("知道了", role: .cancel) { importError = nil }
         } message: { Text(importError ?? "") }
@@ -469,6 +475,7 @@ private struct NotebookEditorView: View {
         .animation(reduced ? nil : .timingCurve(0.22, 1, 0.36, 1, duration: 0.42), value: railOverride)
         .animation(reduced ? nil : .timingCurve(0.22, 1, 0.36, 1, duration: 0.3), value: tool)
         .animation(reduced ? nil : .timingCurve(0.42, 0, 0.58, 1, duration: 0.35), value: assistant)
+        .animation(reduced ? nil : .timingCurve(0.42, 0, 0.58, 1, duration: 0.4), value: page?.id)
     }
 
     private func receiveToolCommand(_ notification: Notification) {
@@ -516,7 +523,7 @@ private struct NotebookEditorView: View {
                 Image(systemName: "sparkles").font(.system(size: 20))
                     .frame(width: 44, height: 44).contentShape(Rectangle())
                     .foregroundStyle(Notebook.softInk).background(Notebook.soft, in: RoundedRectangle(cornerRadius: 10))
-            }.buttonStyle(.plain).disabled(page == nil || store.isStorageReadOnly)
+            }.buttonStyle(NotebookIconMotion()).disabled(page == nil || store.isStorageReadOnly)
                 .accessibilityLabel("就这一页问一步").accessibilityIdentifier("ask-notebook")
         }
     }
@@ -543,7 +550,7 @@ private struct NotebookEditorView: View {
             Image(systemName: symbol).font(.system(size: 20)).frame(width: 44, height: 44).contentShape(Rectangle())
                 .foregroundStyle(tool == value ? Notebook.accent : Notebook.secondary)
                 .background(tool == value ? Notebook.soft : .clear, in: RoundedRectangle(cornerRadius: 10))
-        }.buttonStyle(.plain).accessibilityLabel(title).accessibilityAddTraits(tool == value ? .isSelected : [])
+        }.buttonStyle(NotebookIconMotion()).accessibilityLabel(title).accessibilityAddTraits(tool == value ? .isSelected : [])
     }
 
     private var colorControl: some View {
@@ -628,7 +635,7 @@ private struct NotebookEditorView: View {
                     .font(.caption2).foregroundStyle(selected ? Notebook.accent : Notebook.secondary)
                     .lineLimit(1).frame(width: vertical ? 116 : 76, alignment: .leading)
             }.padding(3)
-        }.buttonStyle(.plain).accessibilityLabel("第 \(index + 1) 页，\(pageDisplayTitle(item))")
+        }.buttonStyle(NotebookIconMotion()).accessibilityLabel("第 \(index + 1) 页，\(pageDisplayTitle(item))")
             .accessibilityAddTraits(selected ? .isSelected : [])
             .contextMenu {
                 Button { finishTitleEditing(); dismissKeyboard(); renamedPageTitle = item.title; renamingPage = item } label: { Label("重命名页面", systemImage: "pencil") }
@@ -648,7 +655,7 @@ private struct NotebookEditorView: View {
             .foregroundStyle(Notebook.tertiary).frame(width: vertical ? 116 : 76, height: vertical ? 112 : 102)
             .background(Notebook.surface.opacity(0.6), in: RoundedRectangle(cornerRadius: 5))
             .overlay(RoundedRectangle(cornerRadius: 5).stroke(Notebook.lineStrong, style: StrokeStyle(lineWidth: 1, dash: [4, 4])))
-        }.buttonStyle(.plain).accessibilityLabel("添加页面").accessibilityIdentifier("page-create").disabled(store.isStorageReadOnly)
+        }.buttonStyle(NotebookIconMotion()).accessibilityLabel("添加页面").accessibilityIdentifier("page-create").disabled(store.isStorageReadOnly)
     }
 
     private func thumbnailTitle(_ item: NotePage, index: Int) -> String {
@@ -747,7 +754,7 @@ private struct NotebookInkPicker: View {
             Circle().fill(color).frame(width: 22, height: 22)
                 .overlay(Circle().stroke(Notebook.lineStrong, lineWidth: 1))
                 .frame(width: 44, height: 44).contentShape(Rectangle())
-        }.buttonStyle(.plain).accessibilityLabel("墨水颜色")
+        }.buttonStyle(NotebookIconMotion()).accessibilityLabel("墨水颜色")
             .popover(isPresented: $presented) {
                 VStack(alignment: .leading, spacing: 20) {
                     Text("墨水颜色").font(.subheadline.weight(.semibold)).foregroundStyle(Notebook.ink)
@@ -778,7 +785,7 @@ private struct NotebookInkPicker: View {
                 .overlay(Circle().stroke(Notebook.lineStrong, lineWidth: 1))
                 .overlay { if selected { Image(systemName: "checkmark").font(.caption.weight(.bold)).foregroundStyle(value == 0xFFFFFF || value == 0xC59B36 ? .black : .white) } }
                 .frame(width: 44, height: 44).contentShape(Rectangle())
-        }.buttonStyle(.plain).accessibilityLabel(name).accessibilityAddTraits(selected ? .isSelected : [])
+        }.buttonStyle(NotebookIconMotion()).accessibilityLabel(name).accessibilityAddTraits(selected ? .isSelected : [])
     }
 
     private func remember(_ color: Color) {
@@ -805,7 +812,7 @@ private struct NotebookWidthPicker: View {
                 Capsule().fill(Notebook.secondary).frame(width: 24, height: min(max(width / 2, 2), 10)).frame(height: 10)
                 Text(String(format: "%.0f", width)).font(.caption2).monospacedDigit()
             }.frame(width: 44, height: 44).contentShape(Rectangle())
-        }.buttonStyle(.plain).accessibilityLabel("笔画粗细：\(Int(width))")
+        }.buttonStyle(NotebookIconMotion()).accessibilityLabel("笔画粗细：\(Int(width))")
             .popover(isPresented: $presented) {
                 VStack(alignment: .leading, spacing: 18) {
                     HStack {
@@ -820,7 +827,7 @@ private struct NotebookWidthPicker: View {
                                 Circle().fill(Notebook.ink).frame(width: min(value, 26), height: min(value, 26))
                                     .frame(maxWidth: .infinity, minHeight: 44)
                                     .background(abs(width - value) < 0.3 ? Notebook.soft : Notebook.paper, in: RoundedRectangle(cornerRadius: 8))
-                            }.buttonStyle(.plain).accessibilityLabel("粗细 \(String(format: "%.1f", value))")
+                            }.buttonStyle(NotebookIconMotion()).accessibilityLabel("粗细 \(String(format: "%.1f", value))")
                         }
                     }
                 }.foregroundStyle(Notebook.ink).padding(22).frame(width: 260).background(Notebook.surface)

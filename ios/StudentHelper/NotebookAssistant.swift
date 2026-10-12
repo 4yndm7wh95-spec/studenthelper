@@ -384,12 +384,15 @@ struct NotebookAssistantView: View {
     @State private var pageImage: UIImage?
     var onClose: (() -> Void)?
     var availableHeight: CGFloat = 600
+    var panelSize: CGSize?
+    @Environment(\.accessibilityReduceMotion) private var reduced
     private let pageID: UUID
-    init(notebookID: UUID, pageID: UUID, availableHeight: CGFloat = 600, onClose: (() -> Void)? = nil) {
+    init(notebookID: UUID, pageID: UUID, availableHeight: CGFloat = 600, panelSize: CGSize? = nil, onClose: (() -> Void)? = nil) {
         _model = StateObject(wrappedValue: NotebookAssistantModel.session(notebookID: notebookID, pageID: pageID))
         self.pageID = pageID
         self.onClose = onClose
         self.availableHeight = availableHeight
+        self.panelSize = panelSize
     }
     var body: some View {
         VStack(spacing: 8) {
@@ -420,7 +423,7 @@ struct NotebookAssistantView: View {
                                         MathMessageBody(text: entry.text, cards: false).padding(10)
                                             .background(entry.role == "user" ? Notebook.soft : Notebook.surface, in: RoundedRectangle(cornerRadius: 12))
                                         if entry.role != "user" { Spacer(minLength: 12) }
-                                    }
+                                    }.transition(.opacity.combined(with: .offset(y: 8)))
                                 }
                                 if let error = model.error { Text(error).font(.caption).foregroundStyle(Notebook.danger) }
                                 if !model.proposals.isEmpty {
@@ -429,7 +432,7 @@ struct NotebookAssistantView: View {
                                 }
                                 Color.clear.frame(height: 1).id("chat-bottom")
                             }
-                        }.frame(height: min(210, max(50, availableHeight - 175)))
+                        }.frame(height: panelSize == nil ? min(210, max(50, availableHeight - 175)) : max(20, availableHeight - 175))
                             .onAppear { proxy.scrollTo("chat-bottom", anchor: .bottom) }
                             .onChange(of: model.conversation.count) { _, _ in
                                 withAnimation(.easeInOut(duration: 0.3)) { proxy.scrollTo("chat-bottom", anchor: .bottom) }
@@ -439,6 +442,7 @@ struct NotebookAssistantView: View {
                 if selectingRegion, let pageImage {
                     NotebookRegionPicker(image: pageImage, region: $model.selectedRegion).frame(height: min(200, max(80, availableHeight - 175)))
                 }
+                if model.conversation.isEmpty, let panelSize, panelSize.height > 220 { Spacer(minLength: 0) }
                 scopeControls
                 HStack(alignment: .bottom, spacing: 8) {
                     TextField("问这页笔记…", text: $model.question, axis: .vertical)
@@ -448,19 +452,22 @@ struct NotebookAssistantView: View {
                     Button { model.ask(store: store, automation: automation, learning: learning) } label: {
                         Image(systemName: "arrow.up").font(.headline).frame(width: 40, height: 40)
                             .foregroundStyle(Notebook.onAccent).background(Notebook.accent, in: Circle())
-                    }.buttonStyle(.plain).accessibilityLabel("问一步")
+                    }.buttonStyle(NotebookIconMotion()).accessibilityLabel("问一步")
                         .disabled(model.question.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || (selectingRegion && model.selectedRegion == nil))
                 }
             }
-        }.padding(12).foregroundStyle(Notebook.secondary)
+        }.frame(height: panelSize.map { max(150, $0.height - 24) }).padding(12).foregroundStyle(Notebook.secondary)
             .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 22))
             .overlay(RoundedRectangle(cornerRadius: 22).stroke(Notebook.line.opacity(0.6), lineWidth: 0.5))
             .shadow(color: .black.opacity(0.12), radius: 16, y: 6)
+            .buttonStyle(NotebookIconMotion())
             .accessibilityElement(children: .contain).accessibilityIdentifier("notebook-chat-window")
             .sheet(isPresented: $settings) {
                 NavigationStack { SettingsView().toolbar { ToolbarItem(placement: .confirmationAction) { Button("完成") { settings = false } } } }.aiInteractionLocked()
             }
-            .animation(.timingCurve(0.42, 0, 0.58, 1, duration: 0.4), value: model.busy)
+            .animation(reduced ? nil : .timingCurve(0.42, 0, 0.58, 1, duration: 0.4), value: model.busy)
+            .animation(reduced ? nil : .timingCurve(0.42, 0, 0.58, 1, duration: 0.4), value: selectingRegion)
+            .animation(reduced ? nil : .timingCurve(0.42, 0, 0.58, 1, duration: 0.4), value: model.conversation.count)
             .task {
                 NotificationCenter.default.post(name: .notebookFlushDrawing, object: nil)
                 if let page = store.page(id: pageID) { pageImage = try? NotebookPageRenderer.checkedImage(page: page, store: store) }
@@ -497,7 +504,7 @@ struct NotebookAssistantView: View {
             Image(systemName: symbol).font(.system(size: 20)).frame(width: 44, height: 44)
                 .foregroundStyle(selected ? Notebook.accent : Notebook.secondary)
                 .background(selected ? Notebook.soft : .clear, in: RoundedRectangle(cornerRadius: 10))
-        }.buttonStyle(.plain).accessibilityLabel(label).accessibilityAddTraits(selected ? .isSelected : [])
+        }.buttonStyle(NotebookIconMotion()).accessibilityLabel(label).accessibilityAddTraits(selected ? .isSelected : [])
     }
 }
 

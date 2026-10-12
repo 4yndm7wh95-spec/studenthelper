@@ -55,6 +55,22 @@ import UIKit
         XCTAssertTrue(chat.waitForExistence(timeout: 5))
         XCTAssertLessThan(chat.frame.height, app.frame.height * 0.5)
         XCTAssertLessThan(chat.frame.width, app.frame.width * 0.7)
+        let initialPosition = chat.frame.origin
+        let move = app.descendants(matching: .any).matching(identifier: "chat-move-handle").firstMatch
+        let moveStart = move.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
+        moveStart.press(forDuration: 0.5, thenDragTo: moveStart.withOffset(CGVector(dx: -100, dy: -160)))
+        XCTAssertLessThan(chat.frame.minX, initialPosition.x - 50)
+        XCTAssertLessThan(chat.frame.minY, initialPosition.y - 80)
+        let initialSize = chat.frame.size
+        let resize = app.descendants(matching: .any).matching(identifier: "chat-resize-handle").firstMatch
+        XCTAssertTrue(resize.exists)
+        resize.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
+            .press(forDuration: 0.5, thenDragTo: app.coordinate(withNormalizedOffset: CGVector(dx: 0.08, dy: 0.2)))
+        XCTAssertGreaterThan(chat.frame.width, initialSize.width + 30)
+        XCTAssertGreaterThan(chat.frame.height, initialSize.height + 30)
+        XCTAssertLessThanOrEqual(chat.frame.width, app.frame.width * 0.75 + 1)
+        XCTAssertLessThanOrEqual(chat.frame.height, app.frame.height * 0.75 + 1)
+        capture(app, "iPadResizableChat")
         XCTAssertTrue(app.descendants(matching: .any)["notebook-question"].exists)
         XCTAssertFalse(app.buttons["问一步"].isEnabled, "An empty question must not send a model request")
         capture(app, "iPadNotebookAssistant")

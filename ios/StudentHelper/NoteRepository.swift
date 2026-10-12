@@ -131,7 +131,7 @@ struct NoteRepository {
                     throw NoteStorageError.invalidAsset
                 }
                 for object in page.objects {
-                    guard objectIDs.insert(object.id).inserted, object.frame.isFinite,
+                    guard objectIDs.insert(object.id).inserted, object.frame.isFinite, object.angle.isFinite,
                           object.frame.width > 0, object.frame.height > 0,
                           object.frame.x >= 0, object.frame.y >= 0,
                           object.frame.x + object.frame.width <= page.width + 0.001,

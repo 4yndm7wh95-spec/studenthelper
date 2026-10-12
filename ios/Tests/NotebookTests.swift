@@ -22,6 +22,33 @@ final class NotebookTests: XCTestCase {
         XCTAssertFalse(store.isStorageReadOnly)
     }
 
+    func testImageRotationPersistsRendersAndUndoRestoresWholeTransform() throws {
+        _ = store.createNotebook(title: "旋转")
+        let page = try XCTUnwrap(store.currentPage)
+        let image = UIGraphicsImageRenderer(size: CGSize(width: 160, height: 60)).image { output in
+            UIColor.red.setFill(); output.fill(CGRect(x: 0, y: 0, width: 160, height: 60))
+        }
+        let id = try XCTUnwrap(store.addImage(data: XCTUnwrap(image.pngData()), name: "题目", to: page.id, at: NoteRect(x: 200, y: 200, width: 160, height: 60)))
+        let before = try XCTUnwrap(store.page(id: page.id)?.objects.first)
+        let originalImage = try NotebookPageRenderer.checkedImage(page: XCTUnwrap(store.page(id: page.id)), store: store).pngData()
+        XCTAssertTrue(store.updateObjectTransform(NoteRect(x: 180, y: 160, width: 200, height: 75), rotation: .pi / 3, pageID: page.id, objectID: id))
+        let rotated = try XCTUnwrap(store.page(id: page.id)?.objects.first)
+        XCTAssertEqual(rotated.angle, .pi / 3, accuracy: 0.0001)
+        XCTAssertNotEqual(originalImage, try NotebookPageRenderer.checkedImage(page: XCTUnwrap(store.page(id: page.id)), store: store).pngData())
+        let reopened = NotebookStore(folder: folder)
+        XCTAssertEqual(reopened.page(id: page.id)?.objects.first, rotated)
+        store.undo(); XCTAssertEqual(store.page(id: page.id)?.objects.first, before)
+        store.redo(); XCTAssertEqual(store.page(id: page.id)?.objects.first, rotated)
+        XCTAssertFalse(store.updateObjectTransform(rotated.frame, rotation: .nan, pageID: page.id, objectID: id))
+        let bounded = try NoteObject.bounded(NoteRect(x: 0, y: 0, width: 700, height: 900), rotation: .pi / 4, pageWidth: page.width, pageHeight: page.height)
+        let object = NoteObject(frame: bounded, content: before.content, rotation: .pi / 4)
+        XCTAssertGreaterThanOrEqual(object.rotatedBounds.minX, -0.001)
+        XCTAssertLessThanOrEqual(object.rotatedBounds.maxX, page.width + 0.001)
+        let legacy = try JSONSerialization.jsonObject(with: JSONEncoder().encode(before)) as! [String: Any]
+        var old = legacy; old.removeValue(forKey: "rotation")
+        XCTAssertEqual(try JSONDecoder().decode(NoteObject.self, from: JSONSerialization.data(withJSONObject: old)).angle, 0)
+    }
+
     func testNotebookAndPageCRUDOrderAndSelectionPersist() throws {
         let a = try XCTUnwrap(store.createNotebook(title: "数学", course: "高等数学"))
         let first = try XCTUnwrap(store.currentPage?.id)

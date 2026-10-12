@@ -261,7 +261,8 @@ final class AppAutomation: ObservableObject {
         case .setObjectFrame:
             let page = try Self.page(args, notebooks), object = try Self.noteObject(args, page), frame = try Self.rect(args["frame"], page: page)
             operationRegion = frame; try show(page: page, notebooks: notebooks)
-            guard notebooks.updateObjectFrame(frame, pageID: page.id, objectID: object.id) else { throw AppAutomationError.failed(notebooks.storageError ?? "位置未修改") }
+            let rotation = try Self.optionalNumber(args, "rotation", range: -3600...3600).map { $0 * .pi / 180 } ?? object.angle
+            guard notebooks.updateObjectTransform(frame, rotation: rotation, pageID: page.id, objectID: object.id) else { throw AppAutomationError.failed(notebooks.storageError ?? "位置未修改") }
         case .deleteObject:
             let page = try Self.page(args, notebooks), object = try Self.noteObject(args, page)
             operationRegion = object.frame; try show(page: page, notebooks: notebooks); notebooks.removeObject(pageID: page.id, objectID: object.id)
@@ -558,7 +559,7 @@ final class AppAutomation: ObservableObject {
             case .setPaper: return ["page_id", "paper"]
             case .addText: return ["page_id", "text", "frame"]
             case .updateText: return ["page_id", "object_id", "text"]
-            case .setObjectFrame: return ["page_id", "object_id", "frame"]
+            case .setObjectFrame: return ["page_id", "object_id", "frame", "rotation"]
             case .deleteObject: return ["page_id", "object_id"]
             case .addImage: return ["page_id", "name", "data_base64", "frame"]
             case .drawStroke: return ["page_id", "points", "color", "width", "ink"]
@@ -702,14 +703,14 @@ final class AppAutomation: ObservableObject {
             var properties: [String: Any] = [:]
             for key in action.allowedKeys {
                 if key == "frame" { properties[key] = rect }
-                else if ["x", "y", "dx", "dy", "zoom", "width"].contains(key) { properties[key] = ["type": "number"] }
+                else if ["x", "y", "dx", "dy", "zoom", "width", "rotation"].contains(key) { properties[key] = ["type": "number"] }
                 else if key == "allows_finger_drawing" { properties[key] = ["type": "boolean"] }
                 else if key == "ids" { properties[key] = ["type": "array", "items": string, "maxItems": 1000] }
                 else if key == "indices" { properties[key] = ["type": "array", "items": integer, "minItems": 1, "maxItems": 512] }
                 else if key == "points" { properties[key] = ["type": "array", "minItems": 2, "maxItems": 2048, "items": ["type": "object", "properties": ["x": ["type": "number"], "y": ["type": "number"], "pressure": ["type": "number", "minimum": 0.1, "maximum": 1]], "required": ["x", "y"], "additionalProperties": false]] }
                 else { properties[key] = string }
             }
-            let optional: Set<String> = ["course", "color", "after_page_id", "title", "paper", "frame", "ink", "allows_finger_drawing", "x", "y", "dx", "dy", "draft", "status"]
+            let optional: Set<String> = ["course", "color", "after_page_id", "title", "paper", "frame", "ink", "allows_finger_drawing", "x", "y", "dx", "dy", "draft", "status", "rotation"]
             var required = action.allowedKeys.subtracting(optional)
             if action == .importLearningImage { required.remove("chat_id"); required.remove("course") }
             if [.createNotebook, .renameNotebook, .renamePage, .renameChat].contains(action) { required.insert("title") }
