@@ -729,6 +729,7 @@ final class NotebookObjectSelection: UIView, UIGestureRecognizerDelegate {
         resizeHandle.isAccessibilityElement = true
         resizeHandle.accessibilityLabel = "缩放和旋转图片"
         resizeHandle.accessibilityIdentifier = "image-transform-handle"
+        deleteButton.isHidden = true; editButton.isHidden = true; resizeHandle.isHidden = true; outline.opacity = 0
         refreshSelection()
     }
 
@@ -741,7 +742,20 @@ final class NotebookObjectSelection: UIView, UIGestureRecognizerDelegate {
         button.layer.cornerRadius = 16
         button.accessibilityLabel = label
         button.addTarget(self, action: action, for: .touchUpInside)
+        button.addTarget(self, action: #selector(pressControl(_:)), for: .touchDown)
+        button.addTarget(self, action: #selector(releaseControl(_:)), for: [.touchUpInside, .touchUpOutside, .touchCancel])
         addSubview(button)
+    }
+
+    @objc private func pressControl(_ sender: UIButton) {
+        UIView.animate(withDuration: UIAccessibility.isReduceMotionEnabled ? 0 : 0.18, delay: 0, options: [.curveEaseInOut, .beginFromCurrentState]) {
+            sender.transform = CGAffineTransform(scaleX: 0.91, y: 0.91)
+        }
+    }
+    @objc private func releaseControl(_ sender: UIButton) {
+        UIView.animate(withDuration: UIAccessibility.isReduceMotionEnabled ? 0 : 0.25, delay: 0, options: [.curveEaseInOut, .beginFromCurrentState]) {
+            sender.transform = .identity
+        }
     }
 
     func update(objects: [NoteObject]) {
@@ -782,10 +796,7 @@ final class NotebookObjectSelection: UIView, UIGestureRecognizerDelegate {
     }
 
     private func setChromeVisible(_ visible: Bool) {
-        guard chromeVisible != visible else {
-            if !visible { deleteButton.isHidden = true; editButton.isHidden = true; resizeHandle.isHidden = true; outline.opacity = 0 }
-            return
-        }
+        guard chromeVisible != visible else { return }
         chromeVisible = visible
         let views: [UIView] = [deleteButton, editButton, resizeHandle]
         if visible { views.forEach { $0.isHidden = false; $0.alpha = 0 } }
@@ -877,6 +888,7 @@ final class NotebookObjectSelection: UIView, UIGestureRecognizerDelegate {
     }
 }
 
+@MainActor
 enum NotebookPageRenderer {
     static func image(page: NotePage, store: NotebookStore, scale: CGFloat = 1) -> UIImage {
         NotificationCenter.default.post(name: .notebookFlushDrawing, object: nil)

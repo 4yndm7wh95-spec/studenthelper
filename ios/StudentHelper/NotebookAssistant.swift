@@ -505,6 +505,7 @@ struct NotebookAssistantView: View {
                 .foregroundStyle(selected ? Notebook.accent : Notebook.secondary)
                 .background(selected ? Notebook.soft : .clear, in: RoundedRectangle(cornerRadius: 10))
         }.buttonStyle(NotebookIconMotion()).accessibilityLabel(label).accessibilityAddTraits(selected ? .isSelected : [])
+            .animation(reduced ? nil : .timingCurve(0.42, 0, 0.58, 1, duration: 0.28), value: selected)
     }
 }
 

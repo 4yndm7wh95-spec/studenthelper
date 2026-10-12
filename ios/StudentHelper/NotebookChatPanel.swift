@@ -54,7 +54,10 @@ struct NotebookChatPanel<Content: View>: View {
                         .onChanged { value in
                             switch value {
                             case .second(true, let drag):
-                                if !resizing { startSize = size; withAnimation(curve) { resizing = true } }
+                                if !resizing {
+                                    startSize = CGSize(width: size.width, height: min(maximum.height, max(minimum.height, measuredHeight)))
+                                    withAnimation(curve) { resizing = true }
+                                }
                                 if let drag {
                                     var transaction = Transaction(); transaction.disablesAnimations = true
                                     withTransaction(transaction) {
