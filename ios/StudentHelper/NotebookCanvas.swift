@@ -1,5 +1,6 @@
 import SwiftUI
 import UIKit
+import UIKit.UIGestureRecognizerSubclass
 import PencilKit
 
 extension Notification.Name {
@@ -520,7 +521,22 @@ final class NotebookCanvasHost: UIView {
 
 /// Store history is the single undo source for both ink and editable page objects.
 @MainActor
-final class NotebookPKCanvasView: PKCanvasView {
+final class NotebookPKCanvasView: PKCanvasView, UIGestureRecognizerDelegate {
+    private let fingerGuard = NotebookFingerNavigationGesture()
+    override init(frame: CGRect) {
+        super.init(frame: frame)
+        fingerGuard.allowedTouchTypes = [NSNumber(value: UITouch.TouchType.direct.rawValue)]
+        fingerGuard.delegate = self
+        fingerGuard.cancelsTouchesInView = true
+        fingerGuard.delaysTouchesBegan = true
+        addGestureRecognizer(fingerGuard)
+    }
+    required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
+    func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldRecognizeSimultaneouslyWith other: UIGestureRecognizer) -> Bool {
+        // Page navigation and object editing observe fingers on their common ancestor.
+        // PencilKit's own editing recognizers must not consume those fingers.
+        gestureRecognizer === fingerGuard && !(other.view?.isDescendant(of: self) ?? false)
+    }
     var onUndo: (() -> Void)?
     var onRedo: (() -> Void)?
     var canUndoNotebook = false
@@ -533,11 +549,6 @@ final class NotebookPKCanvasView: PKCanvasView {
         redo.discoverabilityTitle = "重做"
         return [undo, redo]
     }
-    override func hitTest(_ point: CGPoint, with event: UIEvent?) -> UIView? {
-        // Fingers navigate the page; only the explicit ink lasso needs PencilKit's editing touches.
-        if !(tool is PKLassoTool), event?.allTouches?.contains(where: { $0.type == .direct }) == true { return nil }
-        return super.hitTest(point, with: event)
-    }
     override func canPerformAction(_ action: Selector, withSender sender: Any?) -> Bool {
         if action == #selector(undoNotebook) { return canUndoNotebook }
         if action == #selector(redoNotebook) { return canRedoNotebook }
@@ -546,6 +557,19 @@ final class NotebookPKCanvasView: PKCanvasView {
     }
     @objc private func undoNotebook(_ sender: UIKeyCommand) { onUndo?() }
     @objc private func redoNotebook(_ sender: UIKeyCommand) { onRedo?() }
+}
+
+@MainActor
+final class NotebookFingerNavigationGesture: UIGestureRecognizer {
+    override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent) {
+        guard touches.allSatisfy({ $0.type == .direct }) else { state = .failed; return }
+        state = .began
+    }
+    override func touchesMoved(_ touches: Set<UITouch>, with event: UIEvent) { state = .changed }
+    override func touchesEnded(_ touches: Set<UITouch>, with event: UIEvent) {
+        if numberOfTouches <= touches.count { state = .ended }
+    }
+    override func touchesCancelled(_ touches: Set<UITouch>, with event: UIEvent) { state = .cancelled }
 }
 
 @MainActor
@@ -564,6 +588,7 @@ final class NotebookPageSurface: UIView {
         addSubview(objectLayer)
         addSubview(canvas)
         addSubview(selection)
+        selection.installGestures(on: self)
         layer.addSublayer(operationHighlight)
         operationHighlight.fillColor = UIColor(Notebook.accent).withAlphaComponent(0.06).cgColor
         operationHighlight.strokeColor = UIColor(Notebook.accent).cgColor
@@ -703,6 +728,7 @@ final class NotebookObjectSelection: UIView, UIGestureRecognizerDelegate {
     private let editButton = UIButton(type: .system)
     private let resizeHandle = UIButton(type: .system)
     private lazy var moveGesture = UIPanGestureRecognizer(target: self, action: #selector(panObject))
+    private var inputGestures: [UIGestureRecognizer] = []
 
     override init(frame: CGRect) {
         super.init(frame: frame)
@@ -724,17 +750,17 @@ final class NotebookObjectSelection: UIView, UIGestureRecognizerDelegate {
         let tap = UITapGestureRecognizer(target: self, action: #selector(tapObject))
         tap.allowedTouchTypes = [NSNumber(value: UITouch.TouchType.direct.rawValue)]
         tap.delegate = self
-        addGestureRecognizer(tap)
+        inputGestures.append(tap)
         let doubleTap = UITapGestureRecognizer(target: self, action: #selector(doubleTapObject))
         doubleTap.numberOfTapsRequired = 2
         doubleTap.allowedTouchTypes = [NSNumber(value: UITouch.TouchType.direct.rawValue)]
         doubleTap.delegate = self
-        addGestureRecognizer(doubleTap)
+        inputGestures.append(doubleTap)
         tap.require(toFail: doubleTap)
         moveGesture.maximumNumberOfTouches = 1
         moveGesture.allowedTouchTypes = [NSNumber(value: UITouch.TouchType.direct.rawValue)]
         moveGesture.delegate = self
-        addGestureRecognizer(moveGesture)
+        inputGestures.append(moveGesture)
         resizeHandle.setImage(UIImage(systemName: "arrow.up.left.and.arrow.down.right"), for: .normal)
         resizeHandle.tintColor = .white
         resizeHandle.isUserInteractionEnabled = false
@@ -746,6 +772,10 @@ final class NotebookObjectSelection: UIView, UIGestureRecognizerDelegate {
     }
 
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
+
+    func installGestures(on surface: UIView) {
+        inputGestures.forEach { surface.addGestureRecognizer($0) }
+    }
 
     private func configureButton(_ button: UIButton, symbol: String, label: String, action: Selector) {
         button.setImage(UIImage(systemName: symbol, withConfiguration: UIImage.SymbolConfiguration(pointSize: 13, weight: .semibold)), for: .normal)
@@ -837,12 +867,14 @@ final class NotebookObjectSelection: UIView, UIGestureRecognizerDelegate {
         if !deleteButton.isHidden && deleteButton.frame.contains(point) { return deleteButton }
         if !editButton.isHidden && editButton.frame.contains(point) { return editButton }
         if !resizeHandle.isHidden && resizeHandle.frame.insetBy(dx: -10, dy: -10).contains(point) { return self }
-        if object(at: point) != nil || bounds.contains(point) { return self }
+        // Hit testing can happen before UIKit has populated event.allTouches.
+        // Keep the visual overlay transparent; typed finger gestures live on the page.
+        if !bounds.contains(point), object(at: point) != nil { return self }
         return nil
     }
 
     func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldReceive touch: UITouch) -> Bool {
-        guard !(touch.view is UIButton) else { return false }
+        guard isUserInteractionEnabled, allowsObjectSelection, !(touch.view is UIButton) else { return false }
         let point = touch.location(in: self)
         let onObject = object(at: point) != nil
         let onGrip = !resizeHandle.isHidden && resizeHandle.frame.insetBy(dx: -10, dy: -10).contains(point)

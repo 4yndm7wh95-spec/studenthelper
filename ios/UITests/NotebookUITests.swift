@@ -78,8 +78,17 @@ import UIKit
             .press(forDuration: 0.5, thenDragTo: app.coordinate(withNormalizedOffset: CGVector(dx: 0.08, dy: 0.2)))
         XCTAssertGreaterThan(chat.frame.width, initialSize.width + 30)
         XCTAssertGreaterThan(chat.frame.height, initialSize.height + 30)
-        XCTAssertLessThanOrEqual(chat.frame.width, app.frame.width * 0.75 + 1)
-        XCTAssertLessThanOrEqual(chat.frame.height, app.frame.height * 0.75 + 1)
+        // All corners share the same input surface; resizing keeps the opposite corner fixed.
+        for (identifier, delta) in [("chat-resize-top-right", CGVector(dx: 30, dy: -20)),
+                                     ("chat-resize-bottom-right", CGVector(dx: 30, dy: 20))] {
+            let grip = app.descendants(matching: .any).matching(identifier: identifier).firstMatch
+            XCTAssertTrue(grip.isHittable)
+            let before = window.frame.size
+            let start = grip.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
+            start.press(forDuration: 0.5, thenDragTo: start.withOffset(delta))
+            XCTAssertGreaterThan(window.frame.width, before.width + 15)
+            XCTAssertGreaterThan(window.frame.height, before.height + 10)
+        }
         capture(app, "iPadResizableChat")
         let paperFrame = app.descendants(matching: .any).matching(identifier: "notebook-canvas").firstMatch.frame
         let question = app.descendants(matching: .any).matching(identifier: "notebook-question").firstMatch

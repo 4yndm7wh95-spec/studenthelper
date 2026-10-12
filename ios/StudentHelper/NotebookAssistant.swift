@@ -382,13 +382,14 @@ struct NotebookAssistantView: View {
     @State private var selectingRegion = false
     @State private var information = false
     @State private var pageImage: UIImage?
+    @State private var followingLatest = true
     var onClose: (() -> Void)?
     var availableHeight: CGFloat = 600
     var panelSize: CGSize?
     @Environment(\.accessibilityReduceMotion) private var reduced
     private let pageID: UUID
-    init(notebookID: UUID, pageID: UUID, availableHeight: CGFloat = 600, panelSize: CGSize? = nil, onClose: (() -> Void)? = nil) {
-        _model = StateObject(wrappedValue: NotebookAssistantModel.session(notebookID: notebookID, pageID: pageID))
+    init(notebookID: UUID, pageID: UUID, availableHeight: CGFloat = 600, panelSize: CGSize? = nil, onClose: (() -> Void)? = nil, model: NotebookAssistantModel? = nil) {
+        _model = StateObject(wrappedValue: model ?? NotebookAssistantModel.session(notebookID: notebookID, pageID: pageID))
         self.pageID = pageID
         self.onClose = onClose
         self.availableHeight = availableHeight
@@ -409,18 +410,20 @@ struct NotebookAssistantView: View {
                     Image(systemName: "xmark").frame(width: 36, height: 36)
                 }.accessibilityLabel("关闭")
             }
-            if model.busy {
-                HStack { ProgressView(); Text(model.progress.isEmpty ? "正在看你的解法" : model.progress).font(.caption); Spacer() }
-                    .padding(.vertical, 8)
-            } else {
-                if !selectingRegion, !model.conversation.isEmpty || model.error != nil || !model.proposals.isEmpty {
+            Group {
+                if !selectingRegion, !model.conversation.isEmpty || model.busy || model.error != nil || !model.proposals.isEmpty {
                     ScrollViewReader { proxy in
                         ScrollView {
-                            LazyVStack(alignment: .leading, spacing: 12) {
+                            VStack(alignment: .leading, spacing: 12) {
                                 ForEach(model.conversation) { entry in
                                     HStack {
                                         if entry.role == "user" { Spacer(minLength: 30) }
-                                        MathMessageBody(text: entry.text, cards: false).padding(10)
+                                        MathMessageBody(text: entry.text, cards: false, onGrow: {
+                                            Task { @MainActor in
+                                                await Task.yield()
+                                                if followingLatest { scrollToLatest(proxy) }
+                                            }
+                                        }).padding(10)
                                             .background(entry.role == "user" ? Notebook.soft : Notebook.surface, in: RoundedRectangle(cornerRadius: 12))
                                         if entry.role != "user" { Spacer(minLength: 12) }
                                     }.transition(.opacity.combined(with: .offset(y: 8)))
@@ -430,13 +433,21 @@ struct NotebookAssistantView: View {
                                     ForEach(model.proposals) { Text($0.description).font(.caption) }
                                     Button("应用修改") { model.apply(store: store) }.buttonStyle(NotebookButton())
                                 }
+                                if model.busy {
+                                    HStack { ProgressView(); Text(model.progress.isEmpty ? "正在看你的解法" : model.progress).font(.caption); Spacer() }
+                                        .padding(.vertical, 8).accessibilityIdentifier("notebook-chat-progress")
+                                }
                                 Color.clear.frame(height: 1).id("chat-bottom")
                             }
                         }.frame(height: panelSize == nil ? min(210, max(50, availableHeight - 175)) : max(20, availableHeight - 175))
-                            .onAppear { proxy.scrollTo("chat-bottom", anchor: .bottom) }
+                            .accessibilityIdentifier("notebook-chat-history")
+                            .simultaneousGesture(DragGesture(minimumDistance: 4).onChanged { _ in followingLatest = false })
+                            .onAppear { scrollToLatest(proxy) }
                             .onChange(of: model.conversation.count) { _, _ in
-                                withAnimation(.easeInOut(duration: 0.3)) { proxy.scrollTo("chat-bottom", anchor: .bottom) }
+                                if model.conversation.last?.role == "user" { followingLatest = true }
+                                if followingLatest { scrollToLatest(proxy) }
                             }
+                            .onChange(of: model.busy) { _, _ in if followingLatest { scrollToLatest(proxy) } }
                     }
                 }
                 if selectingRegion, let pageImage {
@@ -453,8 +464,8 @@ struct NotebookAssistantView: View {
                         Image(systemName: "arrow.up").font(.headline).frame(width: 40, height: 40)
                             .foregroundStyle(Notebook.onAccent).background(Notebook.accent, in: Circle())
                     }.buttonStyle(NotebookIconMotion()).accessibilityLabel("问一步")
-                        .disabled(model.question.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || (selectingRegion && model.selectedRegion == nil))
-                }.padding(.leading, onClose == nil ? 0 : 32)
+                        .disabled(model.busy || model.question.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || (selectingRegion && model.selectedRegion == nil))
+                }.padding(.horizontal, onClose == nil ? 0 : 40)
             }
         }.frame(height: panelSize.map { max(150, $0.height - 24) }).padding(12).foregroundStyle(Notebook.secondary)
             .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 22))
@@ -476,6 +487,11 @@ struct NotebookAssistantView: View {
                 if !busy, let page = store.page(id: pageID) { pageImage = try? NotebookPageRenderer.checkedImage(page: page, store: store) }
             }
             .onDisappear { if !automation.active { model.cancel() } }
+    }
+    private func scrollToLatest(_ proxy: ScrollViewProxy) {
+        withAnimation(reduced ? nil : .timingCurve(0.42, 0, 0.58, 1, duration: 0.3)) {
+            proxy.scrollTo("chat-bottom", anchor: .bottom)
+        }
     }
     private var scopeControls: some View {
         HStack(spacing: 12) {

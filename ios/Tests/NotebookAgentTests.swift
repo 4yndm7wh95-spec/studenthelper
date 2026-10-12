@@ -1,8 +1,50 @@
 import XCTest
+import SwiftUI
+import UIKit
 @testable import StudentHelper
 
 @MainActor
 final class NotebookAgentTests: XCTestCase {
+    func testReplyKeepsHistoryViewAndFollowsDelayedMathHeightToBottom() async throws {
+        let folder = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: folder); NotebookAgentProtocol.replies = [] }
+        let store = NotebookStore(folder: folder)
+        let book = try XCTUnwrap(store.createNotebook(title: "滚动")), page = try XCTUnwrap(store.currentPage?.id)
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [NotebookAgentProtocol.self]
+        let model = NotebookAssistantModel(notebookID: book, pageID: page,
+            configuration: ModelConfiguration(address: "https://notebook.test/v1"), key: "unit-test-only", session: URLSession(configuration: configuration))
+        NotebookAgentProtocol.replies = [["role": "assistant", "content": String(repeating: "先检查这一行，然后继续下一步。\n\n", count: 30)]]
+        model.question = "第一步"; model.ask(store: store)
+        for _ in 0..<100 where model.busy { try await Task.sleep(for: .milliseconds(30)) }
+        XCTAssertFalse(model.busy)
+        let previousWindow = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.flatMap(\.windows).first { $0.isKeyWindow }
+        let window = UIWindow(frame: CGRect(x: 0, y: 0, width: 768, height: 1024))
+        let root = NotebookAssistantView(notebookID: book, pageID: page, availableHeight: 600,
+            panelSize: CGSize(width: 600, height: 600), model: model)
+            .environmentObject(store).environmentObject(LearningStore(fileURL: folder.appendingPathComponent("learning.json")))
+            .environmentObject(AppAutomation())
+        let host = UIHostingController(rootView: root)
+        window.rootViewController = host; window.makeKeyAndVisible()
+        defer { window.isHidden = true; previousWindow?.makeKey() }
+        func history(in view: UIView) -> UIScrollView? {
+            if let scroll = view as? UIScrollView, scroll.isScrollEnabled { return scroll }
+            return view.subviews.lazy.compactMap { history(in: $0) }.first
+        }
+        try await Task.sleep(for: .milliseconds(700))
+        let original = try XCTUnwrap(history(in: host.view))
+        NotebookAgentProtocol.replies = [["role": "assistant", "content": String(repeating: "可以得到 $a_{n+1}=\\sqrt{2a_n}$，继续检查。\n\n", count: 20)]]
+        model.question = "下一步"; model.ask(store: store)
+        host.view.layoutIfNeeded()
+        XCTAssertTrue(history(in: host.view) === original, "Pending replies must retain the scroll view")
+        for _ in 0..<100 where model.busy { try await Task.sleep(for: .milliseconds(30)) }
+        XCTAssertFalse(model.busy)
+        try await Task.sleep(for: .seconds(2))
+        XCTAssertTrue(history(in: host.view) === original, "Completed replies must retain the scroll view")
+        XCTAssertGreaterThan(original.contentSize.height, original.bounds.height)
+        XCTAssertLessThanOrEqual(original.contentSize.height - original.bounds.height - original.contentOffset.y, 8,
+            "Delayed formula rendering must leave the latest reply visible")
+    }
     func testGeometryRejectsBooleansNonFiniteAndNegativeSizes() throws {
         let valid: [String: Any] = ["x": 12, "y": 30, "width": 240, "height": 90]
         XCTAssertEqual(try NotebookAssistantModel.frame(valid), NoteRect(x: 12, y: 30, width: 240, height: 90))

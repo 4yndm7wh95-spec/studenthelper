@@ -15,12 +15,31 @@ final class NotebookTests: XCTestCase {
         try? FileManager.default.removeItem(at: folder); store = nil
     }
 
-    func testBlankFingerTargetIsNavigationLayerInsteadOfPencilKit() {
+    func testSelectionOverlayCannotStealPencilBeforeTouchTypeIsAvailable() {
         let surface = NotebookPageSurface(frame: CGRect(x: 0, y: 0, width: 768, height: 1086))
         surface.selection.allowsObjectSelection = true
         surface.layoutIfNeeded()
-        XCTAssertTrue(surface.hitTest(CGPoint(x: 300, y: 600), with: nil) === surface.selection)
+        let hit = surface.hitTest(CGPoint(x: 300, y: 600), with: nil)
+        XCTAssertTrue(hit === surface.canvas || hit?.isDescendant(of: surface.canvas) == true)
+        XCTAssertNil(surface.selection.hitTest(CGPoint(x: 300, y: 600), with: nil))
         XCTAssertNil(surface.selection.hitTest(CGPoint(x: -20, y: 600), with: nil))
+        let direct = NSNumber(value: UITouch.TouchType.direct.rawValue)
+        XCTAssertEqual(surface.gestureRecognizers?.count, 3)
+        XCTAssertTrue(surface.gestureRecognizers?.allSatisfy { $0.allowedTouchTypes == [direct] } == true)
+        let guardGesture = surface.canvas.gestureRecognizers?.first { $0 is NotebookFingerNavigationGesture }
+        XCTAssertEqual(guardGesture?.allowedTouchTypes, [direct])
+        XCTAssertTrue(guardGesture?.cancelsTouchesInView == true)
+    }
+
+    func testFourCornerResizeKeepsOppositeCornerAndAllowsOversizedWindows() {
+        let size = CGSize(width: 370, height: 300), offset = CGSize(width: -40, height: -100)
+        for corner in NotebookWindowCorner.allCases {
+            let delta = CGSize(width: corner.right ? 1200 : -1200, height: corner.bottom ? 1400 : -1400)
+            let (next, position) = corner.resized(size, offset: offset, delta: delta)
+            XCTAssertEqual(next, CGSize(width: 1570, height: 1700))
+            XCTAssertEqual(position.width - (corner.right ? next.width : 0), offset.width - (corner.right ? size.width : 0))
+            XCTAssertEqual(position.height - (corner.bottom ? next.height : 0), offset.height - (corner.bottom ? size.height : 0))
+        }
     }
 
     func testCleanFirstLaunchHasNoSampleNotebook() {

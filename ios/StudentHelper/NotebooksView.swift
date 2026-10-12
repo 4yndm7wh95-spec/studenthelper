@@ -348,13 +348,12 @@ private struct NotebookEditorView: View {
 
                 }
                 if assistant, let assistantID = assistantPageID ?? page?.id, store.page(id: assistantID) != nil {
-                    VStack { Spacer(minLength: 0); HStack { Spacer(minLength: 0)
                         NotebookChatPanel(available: CGSize(width: max(1, geometry.size.width - 24), height: max(1, geometry.size.height - 24)), viewport: geometry.frame(in: .global)) { panelSize, manualSize in
                             NotebookAssistantView(notebookID: notebookID, pageID: assistantID, availableHeight: manualSize ? panelSize.height : geometry.size.height * 0.75,
                                 panelSize: manualSize ? panelSize : nil, onClose: { assistant = false })
                         }.id(assistantID)
-
-                    } }.padding(12).transition(.opacity.combined(with: .scale(scale: 0.95, anchor: .bottomTrailing)))
+                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
+                        .padding(12).transition(.opacity.combined(with: .scale(scale: 0.95, anchor: .bottomTrailing)))
                 }
             }.background(Notebook.paper).coordinateSpace(name: "notebook-window-space")
         }
