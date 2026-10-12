@@ -61,7 +61,7 @@ import UIKit
         let window = app.descendants(matching: .any).matching(identifier: "notebook-floating-window").firstMatch
         XCTAssertTrue(window.exists)
         let moveStart = window.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0)).withOffset(CGVector(dx: 0, dy: 22))
-        moveStart.press(forDuration: 0.5, thenDragTo: moveStart.withOffset(CGVector(dx: -100, dy: -160)))
+        moveStart.press(forDuration: 0.05, thenDragTo: moveStart.withOffset(CGVector(dx: -100, dy: -160)))
         XCTAssertLessThan(chat.frame.minX, initialPosition.x - 50)
         XCTAssertLessThan(chat.frame.minY, initialPosition.y - 80)
         let initialSize = chat.frame.size
@@ -198,6 +198,11 @@ import UIKit
         let objects = try XCTUnwrap(metadata["objects"] as? [[String: Any]])
         XCTAssertGreaterThan(abs(try XCTUnwrap(objects.first?["rotation"] as? Double)), 0.05)
         capture(app, "iPadRotatedProblemImage")
+        let paper = app.descendants(matching: .any).matching(identifier: "notebook-canvas").firstMatch
+        paper.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.85)).tap()
+        let dismissed = XCTNSPredicateExpectation(predicate: NSPredicate(format: "exists == false OR hittable == false"), object: grip)
+        XCTAssertEqual(XCTWaiter.wait(for: [dismissed], timeout: 5), .completed)
+
         app.buttons["钢笔"].tap()
         let points = (0...24).map { index -> [String: Double] in
             let angle = Double(index) / 24 * .pi * 2

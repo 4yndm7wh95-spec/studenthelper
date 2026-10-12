@@ -356,7 +356,7 @@ private struct NotebookEditorView: View {
 
                     } }.padding(12).transition(.opacity.combined(with: .scale(scale: 0.95, anchor: .bottomTrailing)))
                 }
-            }.background(Notebook.paper)
+            }.background(Notebook.paper).coordinateSpace(name: "notebook-window-space")
         }
     }
 

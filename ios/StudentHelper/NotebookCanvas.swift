@@ -291,6 +291,7 @@ struct NotebookCanvas: UIViewRepresentable {
             // debounced save. Commit it before opening the next stroke's group.
             flushDrawing()
             usingTool = true
+            host?.pageView.selection.select(nil)
             host?.pageView.selection.isUserInteractionEnabled = false
             if !groupingDrawing {
                 parent.store.beginUndoGroup()
@@ -432,7 +433,7 @@ struct NotebookCanvas: UIViewRepresentable {
 }
 
 @MainActor
-final class NotebookCanvasHost: UIView {
+final class NotebookCanvasHost: UIView, UIGestureRecognizerDelegate {
     let scrollView = UIScrollView()
     let pageView = NotebookPageSurface()
     private var pageSize = CGSize(width: 768, height: 1086)
@@ -453,6 +454,11 @@ final class NotebookCanvasHost: UIView {
         scrollView.pinchGestureRecognizer?.allowedTouchTypes = [NSNumber(value: UITouch.TouchType.direct.rawValue)]
         scrollView.minimumZoomScale = 0.25
         scrollView.maximumZoomScale = 4
+        let blankTap = UITapGestureRecognizer(target: self, action: #selector(clearSelectionOnBlank(_:)))
+        blankTap.allowedTouchTypes = [NSNumber(value: UITouch.TouchType.direct.rawValue)]
+        blankTap.cancelsTouchesInView = false
+        blankTap.delegate = self
+        scrollView.addGestureRecognizer(blankTap)
         scrollView.addSubview(pageView)
         addSubview(scrollView)
         pageView.layer.shadowColor = UIColor.black.cgColor
@@ -462,6 +468,15 @@ final class NotebookCanvasHost: UIView {
         accessibilityLabel = "A4 笔记纸"
         accessibilityHint = "Apple Pencil 书写，单指移动，双指缩放；纸张边缘大幅右滑下一页，左滑上一页。"
     }
+
+    @objc private func clearSelectionOnBlank(_ gesture: UITapGestureRecognizer) {
+        pageView.selection.select(nil)
+    }
+    func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldReceive touch: UITouch) -> Bool {
+        let point = touch.location(in: pageView.selection)
+        return pageView.selection.hitTest(point, with: nil) == nil
+    }
+    func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldRecognizeSimultaneouslyWith otherGestureRecognizer: UIGestureRecognizer) -> Bool { true }
 
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
 

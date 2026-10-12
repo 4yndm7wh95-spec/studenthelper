@@ -1,5 +1,4 @@
 import SwiftUI
-import UIKit
 
 struct NotebookChatPanel<Content: View>: View {
     let available: CGSize
@@ -71,7 +70,7 @@ struct NotebookChatPanel<Content: View>: View {
     private var curve: Animation? { reduced ? nil : .timingCurve(0.42, 0, 0.58, 1, duration: 0.42) }
 }
 
-private struct NotebookWindowGrip: UIViewRepresentable {
+private struct NotebookWindowGrip: View {
     let label: String
     let identifier: String
     let onBegin: () -> Void
@@ -80,71 +79,30 @@ private struct NotebookWindowGrip: UIViewRepresentable {
     var onAdjust: ((Bool) -> Void)? = nil
     var symbol: String? = nil
     var active = false
-    func makeUIView(context: Context) -> GripView {
-        let view = GripView()
-        view.backgroundColor = .clear
-        view.isAccessibilityElement = true
-        view.accessibilityLabel = label
-        view.accessibilityIdentifier = identifier
-        let press = UILongPressGestureRecognizer(target: context.coordinator, action: #selector(Coordinator.handle(_:)))
-        press.minimumPressDuration = 0.3
-        press.allowableMovement = 44
-        press.allowedTouchTypes = [NSNumber(value: UITouch.TouchType.direct.rawValue), NSNumber(value: UITouch.TouchType.pencil.rawValue)]
-        view.addGestureRecognizer(press)
-        updateUIView(view, context: context)
-        return view
-    }
-    func updateUIView(_ view: GripView, context: Context) {
-        context.coordinator.parent = self
-        view.onAdjust = onAdjust
-        view.configure(symbol: symbol, active: active)
-        view.accessibilityTraits = onAdjust == nil ? [] : .adjustable
-    }
-    func makeCoordinator() -> Coordinator { Coordinator(self) }
-    final class GripView: UIView {
-        var onAdjust: ((Bool) -> Void)?
-        private let icon = UIImageView()
-        private let bar = UIView()
-        override init(frame: CGRect) {
-            super.init(frame: frame)
-            addSubview(icon); addSubview(bar)
-            icon.contentMode = .scaleAspectFit
-            icon.isUserInteractionEnabled = false; bar.isUserInteractionEnabled = false
-            bar.layer.cornerRadius = 1.5
-        }
-        required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
-        func configure(symbol: String?, active: Bool) {
-            icon.image = symbol.flatMap { UIImage(systemName: $0) }
-            icon.tintColor = UIColor(Notebook.tertiary)
-            bar.isHidden = symbol != nil
-            UIView.animate(withDuration: UIAccessibility.isReduceMotionEnabled ? 0 : 0.25, delay: 0, options: [.curveEaseInOut, .beginFromCurrentState]) {
-                self.bar.backgroundColor = UIColor(Notebook.secondary).withAlphaComponent(active ? 0.7 : 0.3)
-                self.icon.transform = active ? CGAffineTransform(scaleX: 1.12, y: 1.12) : .identity
+    @State private var tracking = false
+    @Environment(\.accessibilityReduceMotion) private var reduced
+
+    var body: some View {
+        ZStack {
+            Rectangle().fill(Notebook.surface.opacity(0.001))
+            if let symbol {
+                Image(systemName: symbol).font(.system(size: 12)).foregroundStyle(Notebook.tertiary)
+                    .scaleEffect(active ? 1.12 : 1)
+            } else {
+                Capsule().fill(Notebook.secondary.opacity(active ? 0.7 : 0.3)).frame(width: 26, height: 3)
+                    .scaleEffect(active ? 1.16 : 1)
             }
         }
-        override func layoutSubviews() {
-            super.layoutSubviews()
-            icon.frame = CGRect(x: bounds.midX - 6, y: bounds.midY - 6, width: 12, height: 12)
-            bar.frame = CGRect(x: bounds.midX - 13, y: bounds.midY - 1.5, width: 26, height: 3)
-        }
-        override func accessibilityIncrement() { onAdjust?(true) }
-        override func accessibilityDecrement() { onAdjust?(false) }
-    }
-    final class Coordinator: NSObject {
-        var parent: NotebookWindowGrip
-        private var origin = CGPoint.zero
-        init(_ parent: NotebookWindowGrip) { self.parent = parent }
-        @objc func handle(_ gesture: UILongPressGestureRecognizer) {
-            guard let window = gesture.view?.window else { return }
-            let point = gesture.location(in: window)
-            switch gesture.state {
-            case .began: origin = point; parent.onBegin()
-            case .changed: parent.onChange(CGSize(width: point.x - origin.x, height: point.y - origin.y))
-            case .ended:
-                parent.onChange(CGSize(width: point.x - origin.x, height: point.y - origin.y)); parent.onEnd()
-            case .cancelled, .failed: parent.onEnd()
-            default: break
+        .contentShape(Rectangle())
+        .highPriorityGesture(DragGesture(minimumDistance: 6, coordinateSpace: .named("notebook-window-space"))
+            .onChanged { value in
+                if !tracking { tracking = true; onBegin() }
+                onChange(value.translation)
             }
-        }
+            .onEnded { value in onChange(value.translation); tracking = false; onEnd() })
+        .animation(reduced ? nil : .timingCurve(0.42, 0, 0.58, 1, duration: 0.25), value: active)
+        .accessibilityLabel(label).accessibilityIdentifier(identifier)
+        .accessibilityValue(active ? "移动中" : "就绪")
+        .accessibilityAdjustableAction { direction in onAdjust?(direction == .increment) }
     }
 }
