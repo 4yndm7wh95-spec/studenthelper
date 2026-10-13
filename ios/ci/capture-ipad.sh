@@ -30,6 +30,9 @@ fi
 if [[ "${IPAD_TEST_SCOPE:-all}" == "touch" ]]; then
   TEST_TARGETS=(-only-testing:StudentHelperTests/NotebookTests -only-testing:StudentHelperTests/NotebookAgentTests -only-testing:StudentHelperUITests/NotebookUITests/testMCPImportsProblemDrawsCorrectionAndUserCanStop -only-testing:StudentHelperUITests/NotebookUITests/testNotebookPagePaperAndAssistantThroughUI -only-testing:StudentHelperUITests/NotebookUITests/testSingleFingerPanAndLargeSwipeTurnPagesWithoutInk)
 fi
+if [[ "${IPAD_TEST_SCOPE:-all}" == "menus" ]]; then
+  TEST_TARGETS=(-only-testing:StudentHelperTests/NotebookTests -only-testing:StudentHelperUITests/NotebookUITests/testMCPImportsProblemDrawsCorrectionAndUserCanStop)
+fi
 if ! xcodebuild -project StudentHelper.xcodeproj -scheme StudentHelper -configuration Debug \
   -destination "platform=iOS Simulator,id=$DEVICE" -derivedDataPath build/simulator \
   -parallel-testing-enabled NO -resultBundlePath build/ipad/notebook-tests.xcresult \

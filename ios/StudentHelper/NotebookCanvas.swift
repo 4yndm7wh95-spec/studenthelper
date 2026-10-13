@@ -222,6 +222,7 @@ struct NotebookCanvas: UIViewRepresentable {
             case .lasso:
                 canvas.tool = PKLassoTool()
             }
+            canvas.updateNativeEditingMenus(allow: tool == .lasso)
             host.pageView.selection.allowsObjectSelection = true
         }
 
@@ -522,6 +523,13 @@ final class NotebookCanvasHost: UIView {
 /// Store history is the single undo source for both ink and editable page objects.
 @MainActor
 final class NotebookPKCanvasView: PKCanvasView, UIGestureRecognizerDelegate {
+    private final class RemovedMenu {
+        weak var owner: UIView?
+        let interaction: UIEditMenuInteraction
+        init(owner: UIView, interaction: UIEditMenuInteraction) { self.owner = owner; self.interaction = interaction }
+    }
+    private var nativeEditingAllowed = false
+    private var removedMenus: [RemovedMenu] = []
     private let fingerGuard = NotebookFingerNavigationGesture()
     override init(frame: CGRect) {
         super.init(frame: frame)
@@ -532,6 +540,37 @@ final class NotebookPKCanvasView: PKCanvasView, UIGestureRecognizerDelegate {
         addGestureRecognizer(fingerGuard)
     }
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        removeInactiveEditingMenus()
+    }
+    func updateNativeEditingMenus(allow: Bool) {
+        nativeEditingAllowed = allow
+        if allow {
+            for menu in removedMenus {
+                guard let owner = menu.owner,
+                      !owner.interactions.contains(where: { $0 is UIEditMenuInteraction }) else { continue }
+                owner.addInteraction(menu.interaction)
+            }
+            removedMenus.removeAll()
+        } else { removeInactiveEditingMenus() }
+    }
+    private func removeInactiveEditingMenus() {
+        guard !nativeEditingAllowed else { return }
+        removedMenus.removeAll { $0.owner == nil }
+        func visit(_ view: UIView) {
+            for interaction in view.interactions {
+                guard let menu = interaction as? UIEditMenuInteraction else { continue }
+                menu.dismissMenu()
+                removedMenus.append(RemovedMenu(owner: view, interaction: menu))
+                view.removeInteraction(menu)
+            }
+            view.subviews.forEach(visit)
+        }
+        // PencilKit may install editing interactions on descendants during layout.
+        // Restrict the operation to this canvas; text inputs and chat menus retain theirs.
+        visit(self)
+    }
     func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldRecognizeSimultaneouslyWith other: UIGestureRecognizer) -> Bool {
         // Page navigation and object editing observe fingers on their common ancestor.
         // PencilKit's own editing recognizers must not consume those fingers.

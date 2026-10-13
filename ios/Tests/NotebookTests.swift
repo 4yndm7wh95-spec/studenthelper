@@ -42,6 +42,33 @@ final class NotebookTests: XCTestCase {
         }
     }
 
+    func testNativeEditingMenusAreRemovedFromDescendantsAndRestoredForLasso() {
+        let canvas = NotebookPKCanvasView(frame: CGRect(x: 0, y: 0, width: 600, height: 800))
+        canvas.drawingPolicy = .pencilOnly
+        canvas.updateNativeEditingMenus(allow: true)
+        let nested = UIView(), internalView = UIView()
+        canvas.addSubview(nested); nested.addSubview(internalView)
+        let menu = UIEditMenuInteraction(delegate: nil)
+        internalView.addInteraction(menu)
+        let unrelatedInput = UITextField()
+        let unrelatedMenu = UIEditMenuInteraction(delegate: nil)
+        unrelatedInput.addInteraction(unrelatedMenu)
+        let drawingEnabled = canvas.drawingGestureRecognizer.isEnabled
+        canvas.updateNativeEditingMenus(allow: false)
+        XCTAssertFalse(internalView.interactions.contains { $0 === menu })
+        XCTAssertTrue(unrelatedInput.interactions.contains { $0 === unrelatedMenu })
+        XCTAssertEqual(canvas.drawingGestureRecognizer.isEnabled, drawingEnabled)
+        XCTAssertEqual(canvas.drawingPolicy, .pencilOnly)
+        // A menu created after initial configuration must also disappear during layout.
+        let lateMenu = UIEditMenuInteraction(delegate: nil)
+        nested.addInteraction(lateMenu)
+        canvas.layoutSubviews()
+        XCTAssertFalse(nested.interactions.contains { $0 === lateMenu })
+        canvas.updateNativeEditingMenus(allow: true)
+        XCTAssertTrue(internalView.interactions.contains { $0 === menu })
+        XCTAssertTrue(nested.interactions.contains { $0 === lateMenu })
+    }
+
     func testCleanFirstLaunchHasNoSampleNotebook() {
         XCTAssertTrue(store.notebooks.isEmpty)
         XCTAssertNil(store.currentPage)
