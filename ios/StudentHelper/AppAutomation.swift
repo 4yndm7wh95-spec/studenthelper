@@ -277,6 +277,13 @@ final class AppAutomation: ObservableObject {
             let page = try Self.page(args, notebooks), object = try Self.noteObject(args, page)
             operationRegion = object.frame; try show(page: page, notebooks: notebooks); notebooks.removeObject(pageID: page.id, objectID: object.id)
             guard notebooks.object(id: object.id, pageID: page.id) == nil else { throw AppAutomationError.failed(notebooks.storageError ?? "内容未删除") }
+        case .cropImage:
+            let page = try Self.page(args, notebooks), object = try Self.noteObject(args, page)
+            let x = try Self.number(args, "x", range: 0...1), y = try Self.number(args, "y", range: 0...1)
+            let width = try Self.number(args, "width", range: 0.0001...1), height = try Self.number(args, "height", range: 0.0001...1)
+            operationRegion = object.frame; try show(page: page, notebooks: notebooks)
+            guard notebooks.cropImage(pageID: page.id, objectID: object.id, region: CGRect(x: x, y: y, width: width, height: height)) else { throw AppAutomationError.failed(notebooks.storageError ?? "照片未裁剪") }
+            result["object_id"] = object.id.uuidString
         case .addImage:
             let page = try Self.page(args, notebooks), data = try Self.imageData(args)
             guard page.objects.count < 2000 else { throw AppAutomationError.invalid("页面内容数量已达到上限") }
@@ -532,6 +539,7 @@ final class AppAutomation: ObservableObject {
         case createNotebook = "create_notebook", renameNotebook = "rename_notebook", deleteNotebook = "delete_notebook", selectNotebook = "select_notebook", reorderNotebooks = "reorder_notebooks"
         case createPage = "create_page", renamePage = "rename_page", deletePage = "delete_page", selectPage = "select_page", reorderPages = "reorder_pages"
         case setPaper = "set_paper", addText = "add_text", updateText = "update_text", setObjectFrame = "set_object_frame", deleteObject = "delete_object", addImage = "add_image"
+        case cropImage = "crop_image"
         case drawStroke = "draw_stroke", writeHandwriting = "write_handwriting", eraseStrokes = "erase_strokes", moveStrokes = "move_strokes", setTool = "set_tool", scrollViewport = "scroll_viewport", zoomViewport = "zoom_viewport", undo, redo
         case addCourse = "add_course", deleteCourse = "delete_course", selectCourse = "select_course", setCourseSubject = "set_course_subject", setCourseNotes = "set_course_notes"
         case newChat = "new_chat", selectChat = "select_chat", renameChat = "rename_chat", deleteChat = "delete_chat", clearChats = "clear_chats", setChatDraft = "set_chat_draft", sendMessage = "send_message", retryReply = "retry_reply", stopReply = "stop_reply", nextQuestion = "next_question", skipPacing = "skip_pacing"
@@ -544,6 +552,7 @@ final class AppAutomation: ObservableObject {
             case .eraseStrokes: return "正在擦去选中的笔迹"
             case .moveStrokes: return "正在调整笔迹的位置"
             case .addImage, .setObjectFrame: return "正在整理题图"
+            case .cropImage: return "正在裁剪照片"
             case .writeHandwriting, .addText, .updateText: return "正在写下这一步的说明"
             case .selectPage, .createPage: return "正在翻到笔记页面"
             case .scrollViewport, .zoomViewport: return "正在调整纸张的位置"
@@ -572,6 +581,7 @@ final class AppAutomation: ObservableObject {
             case .setObjectFrame: return ["page_id", "object_id", "frame", "rotation"]
             case .deleteObject: return ["page_id", "object_id"]
             case .addImage: return ["page_id", "name", "data_base64", "frame"]
+            case .cropImage: return ["page_id", "object_id", "x", "y", "width", "height"]
             case .drawStroke: return ["page_id", "points", "color", "width", "ink"]
             case .eraseStrokes: return ["page_id", "indices"]
             case .moveStrokes: return ["page_id", "indices", "dx", "dy"]
@@ -719,7 +729,8 @@ final class AppAutomation: ObservableObject {
         let actionSchemas = AppAction.allCases.map { action -> [String: Any] in
             var properties: [String: Any] = [:]
             for key in action.allowedKeys {
-                if key == "frame" { properties[key] = rect }
+                if action == .cropImage && ["x", "y", "width", "height"].contains(key) { properties[key] = ["type": "number", "minimum": 0, "maximum": 1, "description": "相对照片的归一化坐标，0至1"] }
+                else if key == "frame" { properties[key] = rect }
                 else if ["x", "y", "dx", "dy", "zoom", "width", "rotation"].contains(key) { properties[key] = ["type": "number"] }
                 else if key == "allows_finger_drawing" { properties[key] = ["type": "boolean"] }
                 else if key == "ids" { properties[key] = ["type": "array", "items": string, "maxItems": 1000] }
@@ -729,6 +740,7 @@ final class AppAutomation: ObservableObject {
             }
             let optional: Set<String> = ["course", "color", "after_page_id", "title", "paper", "frame", "ink", "allows_finger_drawing", "x", "y", "dx", "dy", "draft", "status", "rotation"]
             var required = action.allowedKeys.subtracting(optional)
+            if action == .cropImage { required = action.allowedKeys }
             if action == .importLearningImage { required.remove("chat_id"); required.remove("course") }
             if [.createNotebook, .renameNotebook, .renamePage, .renameChat].contains(action) { required.insert("title") }
             if [.addCourse, .deleteCourse, .selectCourse, .setCourseSubject, .setCourseNotes, .addCourseFile].contains(action) { required.insert("course") }

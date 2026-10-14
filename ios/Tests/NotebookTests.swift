@@ -76,6 +76,31 @@ final class NotebookTests: XCTestCase {
         XCTAssertFalse(store.isStorageReadOnly)
     }
 
+    func testPhotoCropPreservesRotatedPlacementAndUndoRestoresOriginal() throws {
+        _ = store.createNotebook(title: "裁剪")
+        let page = try XCTUnwrap(store.currentPage)
+        let id = try XCTUnwrap(store.addImage(data: imageData(size: CGSize(width: 200, height: 100)), name: "照片", to: page.id, at: NoteRect(x: -40, y: 200, width: 200, height: 100)))
+        XCTAssertTrue(store.updateObjectTransform(NoteRect(x: -40, y: 200, width: 200, height: 100), rotation: .pi / 2, pageID: page.id, objectID: id))
+        let original = try XCTUnwrap(store.object(id: id, pageID: page.id))
+        let asset = try XCTUnwrap(original.image)
+        XCTAssertTrue(store.cropImage(pageID: page.id, objectID: id, region: CGRect(x: 0.5, y: 0, width: 0.5, height: 1), expectedAssetID: asset.id))
+        let cropped = try XCTUnwrap(store.object(id: id, pageID: page.id))
+        XCTAssertEqual(cropped.angle, original.angle)
+        XCTAssertEqual(cropped.frame.cgRect.midX, original.frame.cgRect.midX, accuracy: 0.01)
+        XCTAssertEqual(cropped.frame.cgRect.midY, original.frame.cgRect.midY + 50, accuracy: 0.01)
+        XCTAssertEqual(cropped.frame.width, 100, accuracy: 0.01)
+        let croppedAsset = try XCTUnwrap(cropped.image)
+        XCTAssertNotEqual(croppedAsset.id, asset.id)
+        XCTAssertEqual(store.image(for: croppedAsset)?.size, CGSize(width: 100, height: 100))
+        XCTAssertEqual(NotebookStore(folder: folder).object(id: id, pageID: page.id)?.image?.id, croppedAsset.id)
+        store.undo()
+        XCTAssertEqual(store.object(id: id, pageID: page.id)?.image?.id, asset.id)
+        XCTAssertEqual(store.object(id: id, pageID: page.id)?.frame, original.frame)
+        XCTAssertNotNil(store.image(for: asset))
+        XCTAssertFalse(store.cropImage(pageID: page.id, objectID: id, region: CGRect(x: 0.9, y: 0, width: 0.5, height: 1)))
+        XCTAssertEqual(store.object(id: id, pageID: page.id)?.image?.id, asset.id)
+    }
+
     func testImageRotationPersistsRendersAndUndoRestoresWholeTransform() throws {
         _ = store.createNotebook(title: "旋转")
         let page = try XCTUnwrap(store.currentPage)

@@ -46,6 +46,7 @@ struct NotebookCanvas: UIViewRepresentable {
     var onPageSwipe: (Bool) -> Void = { _ in }
     var onUndoStateChange: (Bool, Bool) -> Void = { _, _ in }
     var onEditText: (UUID) -> Void = { _ in }
+    var onCropImage: (UUID) -> Void = { _ in }
 
     func makeCoordinator() -> Coordinator { Coordinator(parent: self) }
 
@@ -455,7 +456,8 @@ struct NotebookCanvas: UIViewRepresentable {
 
         func editObject(_ objectID: UUID) {
             flushDrawing()
-            parent.onEditText(objectID)
+            if let page = loadedPageID, parent.store.object(id: objectID, pageID: page)?.image != nil { parent.onCropImage(objectID) }
+            else { parent.onEditText(objectID) }
         }
 
         func notifyUndoState() {
@@ -855,7 +857,11 @@ final class NotebookPageSurface: UIView {
             case .image(let asset):
                 let imageView = (objectViews[object.id] as? UIImageView) ?? UIImageView()
                 if objectViews[object.id] == nil || objects.first(where: { $0.id == object.id })?.image != asset {
-                    imageView.image = store.image(for: asset)
+                    let nextImage = store.image(for: asset)
+                    if imageView.image != nil {
+                        UIView.transition(with: imageView, duration: UIAccessibility.isReduceMotionEnabled ? 0 : 0.3,
+                            options: [.transitionCrossDissolve, .curveEaseInOut, .allowUserInteraction]) { imageView.image = nextImage }
+                    } else { imageView.image = nextImage }
                 }
                 imageView.contentMode = .scaleToFill
                 imageView.clipsToBounds = true
@@ -1050,7 +1056,10 @@ final class NotebookObjectSelection: UIView, UIGestureRecognizerDelegate {
         let path = UIBezierPath(rect: CGRect(x: -rect.width / 2 - 2, y: -rect.height / 2 - 2, width: rect.width + 4, height: rect.height + 4))
         path.apply(transform)
         CATransaction.begin(); CATransaction.setDisableActions(true); outline.path = path.cgPath; CATransaction.commit()
-        editButton.isHidden = object.text == nil
+        editButton.isHidden = false
+        editButton.setImage(UIImage(systemName: object.image == nil ? "pencil" : "crop", withConfiguration: UIImage.SymbolConfiguration(pointSize: 13, weight: .semibold)), for: .normal)
+        editButton.accessibilityLabel = object.image == nil ? "编辑选中的文字" : "裁剪选中的图片"
+        editButton.accessibilityIdentifier = object.image == nil ? "text-edit-handle" : "image-crop-handle"
         func corner(_ x: CGFloat, _ y: CGFloat) -> CGPoint { CGPoint(x: x, y: y).applying(transform) }
         let close = corner(rect.width / 2, -rect.height / 2)
         let edit = corner(-rect.width / 2, -rect.height / 2)
@@ -1115,7 +1124,7 @@ final class NotebookObjectSelection: UIView, UIGestureRecognizerDelegate {
     @objc private func doubleTapObject(_ gesture: UITapGestureRecognizer) {
         guard let object = object(at: gesture.location(in: self)) else { return }
         select(object.id)
-        if object.text != nil { onEdit?(object.id) }
+        onEdit?(object.id)
     }
 
     @objc private func deleteSelected() { if let selectedID { onDelete?(selectedID) } }

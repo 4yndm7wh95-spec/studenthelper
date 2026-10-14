@@ -301,6 +301,7 @@ private struct NotebookEditorView: View {
     @State private var textDraft = ""
     @State private var editingTextID: UUID?
     @State private var textPageID: UUID?
+    @State private var cropTarget: NotebookImageCropTarget?
     @FocusState private var pageTitleFocused: Bool
     @AppStorage("notebook.recentInkColors") private var recentColors = "292724,D97757,435B4A,566F87"
 
@@ -444,6 +445,11 @@ private struct NotebookEditorView: View {
                 else { _ = store.addText(textDraft, to: pageID) }
                 tool = .lasso
             }.presentationDetents([.medium, .large]).presentationDragIndicator(.visible).aiInteractionLocked()
+        }
+        .sheet(item: $cropTarget) { target in
+            NotebookImageCropView(target: target) { region in
+                store.cropImage(pageID: target.pageID, objectID: target.id, region: region, expectedAssetID: target.assetID)
+            }.presentationDetents([.large]).aiInteractionLocked()
         }
     }
 
@@ -593,7 +599,10 @@ private struct NotebookEditorView: View {
     private func pageCanvas(_ page: NotePage) -> some View {
         NotebookCanvas(pageID: page.id, store: store, tool: tool, inkColor: inkColor, lineWidth: lineWidth,
                        allowsFingerDrawing: false, undoTrigger: undoTrigger, redoTrigger: redoTrigger,
-                       onPageSwipe: swipePage, onUndoStateChange: { _, _ in }, onEditText: { objectID in beginTextEditing(objectID: objectID) })
+                       onPageSwipe: swipePage, onUndoStateChange: { _, _ in }, onEditText: { objectID in beginTextEditing(objectID: objectID) }, onCropImage: { objectID in
+                           guard let asset = store.object(id: objectID, pageID: page.id)?.image, let image = store.image(for: asset) else { return }
+                           cropTarget = NotebookImageCropTarget(pageID: page.id, id: objectID, assetID: asset.id, image: image)
+                       })
             .id(page.id)
             .accessibilityLabel("\(pageDisplayTitle(page))的书写画布")
             .accessibilityIdentifier("notebook-canvas")

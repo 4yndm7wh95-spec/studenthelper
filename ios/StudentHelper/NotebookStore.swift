@@ -158,6 +158,37 @@ final class NotebookStore: ObservableObject {
     }
 
     @discardableResult
+    func cropImage(pageID: UUID, objectID: UUID, region: CGRect, expectedAssetID: UUID? = nil) -> Bool {
+        flushActiveCanvas(); finishUndoGroup()
+        guard retryPendingDrawings(pageIDs: [pageID]) else { return false }
+        do {
+            try ensureWritable()
+            guard region.origin.x.isFinite, region.origin.y.isFinite, region.width.isFinite, region.height.isFinite,
+                  region.width > 0, region.height > 0, CGRect(x: 0, y: 0, width: 1, height: 1).contains(region) else { throw NoteStorageError.invalidGeometry }
+            var next = library; let (n, p) = try location(of: pageID, in: next)
+            let index = try objectIndex(objectID, page: next.notebooks[n].pages[p])
+            let object = next.notebooks[n].pages[p].objects[index]
+            guard let asset = object.image, expectedAssetID == nil || expectedAssetID == asset.id,
+                  let image = image(for: asset), let source = image.cgImage else { throw NoteStorageError.invalidAsset }
+            let pixels = CGRect(x: region.minX * CGFloat(source.width), y: region.minY * CGFloat(source.height),
+                width: region.width * CGFloat(source.width), height: region.height * CGFloat(source.height)).integral.intersection(CGRect(x: 0, y: 0, width: source.width, height: source.height))
+            guard let cropped = source.cropping(to: pixels), let data = UIImage(cgImage: cropped).pngData() else { throw NoteStorageError.invalidAsset }
+            let replacement = try repository.importImage(data, name: asset.name)
+            let normalized = CGRect(x: pixels.minX / CGFloat(source.width), y: pixels.minY / CGFloat(source.height),
+                width: pixels.width / CGFloat(source.width), height: pixels.height / CGFloat(source.height))
+            let original = object.frame.cgRect
+            let delta = CGPoint(x: (normalized.midX - 0.5) * original.width, y: (normalized.midY - 0.5) * original.height)
+                .applying(CGAffineTransform(rotationAngle: CGFloat(object.angle)))
+            let size = CGSize(width: original.width * normalized.width, height: original.height * normalized.height)
+            let frame = CGRect(x: original.midX + delta.x - size.width / 2, y: original.midY + delta.y - size.height / 2, width: size.width, height: size.height)
+            next.notebooks[n].pages[p].objects[index].content = .image(replacement)
+            next.notebooks[n].pages[p].objects[index].frame = try NoteObject.freeImageFrame(NoteRect(frame), rotation: object.angle)
+            touch(&next, notebook: n, page: p)
+            return commit(next)
+        } catch { report(error); return false }
+    }
+
+    @discardableResult
     func updateObjectTransform(_ frame: NoteRect, rotation: Double, pageID: UUID, objectID: UUID) -> Bool {
         apply(.setObjectTransform(pageID: pageID, objectID: objectID, frame: frame, rotation: rotation)) != nil
     }

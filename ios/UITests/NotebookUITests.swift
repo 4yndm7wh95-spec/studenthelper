@@ -221,6 +221,19 @@ import UIKit
         let data = try XCTUnwrap(image.pngData())
         _ = try await rpc(endpoint, token: token, id: 3, method: "tools/call", params: ["name": "perform_app_action", "arguments": ["action": "add_image", "parameters": ["page_id": pageID, "name": "Problem", "data_base64": data.base64EncodedString()]]])
         app.buttons["钢笔"].tap()
+        let cropButton = app.descendants(matching: .any).matching(identifier: "image-crop-handle").firstMatch
+        XCTAssertTrue(cropButton.waitForExistence(timeout: 5)); cropButton.tap()
+        let cropCorner = app.descendants(matching: .any).matching(identifier: "image-crop-corner-0").firstMatch
+        XCTAssertTrue(cropCorner.waitForExistence(timeout: 5))
+        let cropStart = cropCorner.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
+        cropStart.press(forDuration: 0.15, thenDragTo: cropStart.withOffset(CGVector(dx: 60, dy: 24)))
+        capture(app, "iPadPhotoCrop")
+        app.buttons["image-crop-confirm"].tap()
+        let cropRead = try await rpc(endpoint, token: token, id: 93, method: "tools/call", params: ["name": "read_page", "arguments": ["page_id": pageID]])
+        let cropObjects = try XCTUnwrap(self.metadata(cropRead)["objects"] as? [[String: Any]])
+        let cropFrame = try XCTUnwrap(cropObjects.first?["frame"] as? [String: Any])
+        XCTAssertLessThan(try XCTUnwrap(cropFrame["width"] as? Double), 640)
+        app.buttons["撤销"].tap()
         let grip = app.descendants(matching: .any).matching(identifier: "image-transform-handle").firstMatch
         XCTAssertTrue(grip.waitForExistence(timeout: 5))
         let gripStart = grip.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
