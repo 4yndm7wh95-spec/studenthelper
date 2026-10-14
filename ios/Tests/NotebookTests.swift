@@ -492,6 +492,84 @@ final class NotebookTests: XCTestCase {
         XCTAssertNil(NotebookScratchOut.apply(to: PKDrawing(strokes: [existing, zigzag]), baseline: baseline))
     }
 
+    func testScratchOutCoversAllInkInsideThePatchIncludingGapsBetweenPasses() throws {
+        let first = stroke([CGPoint(x: 160, y: 135), CGPoint(x: 170, y: 135)])
+        let second = stroke([CGPoint(x: 225, y: 175), CGPoint(x: 230, y: 180)])
+        let outside = stroke([CGPoint(x: 420, y: 160), CGPoint(x: 450, y: 160)])
+        let baseline = PKDrawing(strokes: [first, second, outside])
+        let scratch = stroke((0...10).map { CGPoint(x: $0 % 2 == 0 ? 100 : 300, y: 100 + $0 * 12) })
+        let result = try XCTUnwrap(NotebookScratchOut.apply(to: PKDrawing(strokes: baseline.strokes + [scratch]), baseline: baseline))
+        XCTAssertEqual(result.drawing.strokes.count, 1)
+        XCTAssertEqual(result.drawing.strokes[0].path[0].location, outside.path[0].location)
+    }
+
+    func testPencilContactLocksTheWholePaperAndRestoresFingerPanAfterLifting() {
+        let host = NotebookCanvasHost(frame: CGRect(x: 0, y: 0, width: 768, height: 1000))
+        host.layoutSubviews()
+        let offset = host.scrollView.contentOffset, zoom = host.scrollView.zoomScale
+        host.beginInk()
+        XCTAssertFalse(host.scrollView.panGestureRecognizer.isEnabled)
+        XCTAssertFalse(host.scrollView.pinchGestureRecognizer!.isEnabled)
+        host.scrollView.contentOffset = CGPoint(x: offset.x + 12, y: offset.y + 20)
+        host.enforceInkViewport(); host.layoutSubviews()
+        XCTAssertEqual(host.scrollView.contentOffset, offset)
+        XCTAssertEqual(host.scrollView.zoomScale, zoom)
+        host.endInk()
+        XCTAssertTrue(host.scrollView.panGestureRecognizer.isEnabled)
+        XCTAssertTrue(host.scrollView.pinchGestureRecognizer!.isEnabled)
+    }
+
+    func testPauseShapeRecognizerSupportsLinesTurnsTrianglesRectanglesAndOvals() throws {
+        func samples(_ vertices: [CGPoint]) -> [CGPoint] {
+            var points: [CGPoint] = []
+            for (a, b) in zip(vertices, vertices.dropFirst()) {
+                for index in 0..<30 { let t = CGFloat(index) / 30; points.append(CGPoint(x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t)) }
+            }
+            return points + [vertices.last!]
+        }
+        let line = (0...60).map { CGPoint(x: Double(100 + $0 * 3), y: 100 + sin(Double($0) * 0.2) * 2) }
+        let straight = try XCTUnwrap(NotebookShapes.recognize(line))
+        XCTAssertEqual(straight.kind, "line")
+        XCTAssertLessThan(straight.points.map(\.y).max()! - straight.points.map(\.y).min()!, 0.01)
+        let cases: [(String, [CGPoint])] = [
+            ("polyline", samples([CGPoint(x: 80, y: 80), CGPoint(x: 200, y: 84), CGPoint(x: 204, y: 200)])),
+            ("triangle", samples([CGPoint(x: 150, y: 80), CGPoint(x: 60, y: 220), CGPoint(x: 240, y: 220), CGPoint(x: 150, y: 80)])),
+            ("square", samples([CGPoint(x: 80, y: 80), CGPoint(x: 202, y: 83), CGPoint(x: 200, y: 204), CGPoint(x: 82, y: 200), CGPoint(x: 80, y: 80)])),
+            ("rectangle", samples([CGPoint(x: 80, y: 80), CGPoint(x: 260, y: 80), CGPoint(x: 260, y: 180), CGPoint(x: 80, y: 180), CGPoint(x: 80, y: 80)]))
+        ]
+        for (kind, points) in cases { XCTAssertEqual(try XCTUnwrap(NotebookShapes.recognize(points)).kind, kind) }
+        for (rx, ry, kind) in [(60.0, 60.0, "circle"), (90.0, 40.0, "ellipse")] {
+            let points = (0...120).map { index -> CGPoint in
+                let angle = Double(index) / 120 * .pi * 2
+                return CGPoint(x: 200 + rx * cos(angle), y: 200 + ry * sin(angle))
+            }
+            XCTAssertEqual(try XCTUnwrap(NotebookShapes.recognize(points)).kind, kind)
+        }
+        let scratch = (0...120).map { CGPoint(x: 100 + ($0 % 12 < 6 ? $0 % 6 : 12 - $0 % 12) * 15, y: 100 + $0 / 6) }
+        XCTAssertNil(NotebookShapes.recognize(scratch), "Repeated scratch-out must not become a shape")
+    }
+
+    func testHeldShapeIsCommittedAsOneUndoableNativeStroke() throws {
+        _ = store.createNotebook(title: "图形")
+        let page = try XCTUnwrap(store.currentPage)
+        let host = NotebookCanvasHost(frame: CGRect(x: 0, y: 0, width: 768, height: 1000))
+        let parent = NotebookCanvas(pageID: page.id, store: store)
+        let coordinator = NotebookCanvas.Coordinator(parent: parent)
+        coordinator.host = host; host.pageView.canvas.delegate = coordinator; coordinator.update(parent: parent)
+        host.pageView.layoutSubviews()
+        let canvas = host.pageView.canvas
+        coordinator.canvasViewDidBeginUsingTool(canvas)
+        let points = (0...40).map { CGPoint(x: Double(100 + $0 * 4), y: 150 + sin(Double($0)) * 2) }
+        coordinator.previewShape(canvas, points: points)
+        XCTAssertNotNil(coordinator.heldShape)
+        coordinator.finishStroke()
+        XCTAssertEqual(store.drawing(for: page.id).strokes.count, 1)
+        XCTAssertLessThan(store.drawing(for: page.id).bounds.height, 6)
+        XCTAssertFalse(host.inkLocked)
+        coordinator.undo(); XCTAssertTrue(store.drawing(for: page.id).strokes.isEmpty)
+        coordinator.redo(); XCTAssertEqual(store.drawing(for: page.id).strokes.count, 1)
+    }
+
     func testRedHandwrittenMathIsNativeInkAndPreservesRadicalSubscriptAndFraction() async throws {
         _ = store.createNotebook(title: "红笔")
         let page = try XCTUnwrap(store.currentPage)
