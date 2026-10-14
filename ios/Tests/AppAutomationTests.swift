@@ -77,6 +77,27 @@ final class AppAutomationTests: XCTestCase {
         catch {}
     }
 
+    func testMCPCropsPhotoAndUndoRestoresOriginalAsset() async throws {
+        let automation = AppAutomation(), notebooks = store()
+        defer { try? FileManager.default.removeItem(at: notebooks.repository.folder) }
+        _ = notebooks.createNotebook(title: "照片")
+        let page = try XCTUnwrap(notebooks.currentPage)
+        let format = UIGraphicsImageRendererFormat(); format.scale = 1
+        let image = UIGraphicsImageRenderer(size: CGSize(width: 200, height: 100), format: format).image { context in
+            UIColor.green.setFill(); context.fill(CGRect(x: 0, y: 0, width: 200, height: 100))
+        }
+        let object = try XCTUnwrap(notebooks.addImage(data: XCTUnwrap(image.pngData()), name: "照片", to: page.id))
+        let original = try XCTUnwrap(notebooks.object(id: object, pageID: page.id)?.image)
+        let session = try XCTUnwrap(automation.begin {})
+        defer { automation.end(session) }
+        _ = try await action("crop_image", ["page_id": page.id.uuidString, "object_id": object.uuidString, "x": 0.5, "y": 0, "width": 0.5, "height": 1], automation: automation, store: notebooks)
+        let cropped = try XCTUnwrap(notebooks.object(id: object, pageID: page.id)?.image)
+        XCTAssertNotEqual(cropped.id, original.id)
+        XCTAssertEqual(notebooks.image(for: cropped)?.size, CGSize(width: 100, height: 100))
+        _ = try await action("undo", [:], automation: automation, store: notebooks)
+        XCTAssertEqual(notebooks.object(id: object, pageID: page.id)?.image?.id, original.id)
+    }
+
     func testSchemaListsEveryActionAndCannotExposeSecretsOrPaths() throws {
         let tools = AppAutomation.tools
         XCTAssertEqual(Set(tools.compactMap { $0["name"] as? String }), ["read_app_state", "list_notebooks", "list_pages", "read_page", "read_ink", "search_notes", "perform_app_action"])

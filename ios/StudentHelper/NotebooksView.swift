@@ -449,7 +449,7 @@ private struct NotebookEditorView: View {
         .sheet(item: $cropTarget) { target in
             NotebookImageCropView(target: target) { region in
                 store.cropImage(pageID: target.pageID, objectID: target.id, region: region, expectedAssetID: target.assetID)
-            }.presentationDetents([.large]).aiInteractionLocked()
+            }.presentationDetents([.large]).interactiveDismissDisabled().aiInteractionLocked()
         }
     }
 

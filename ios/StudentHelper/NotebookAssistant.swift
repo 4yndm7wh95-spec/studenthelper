@@ -410,6 +410,7 @@ struct NotebookAssistantView: View {
     @State private var information = false
     @State private var pageImage: UIImage?
     @State private var followingLatest = true
+    @State private var scrollTask: Task<Void, Never>?
     var onClose: (() -> Void)?
     var availableHeight: CGFloat = 600
     var panelSize: CGSize?
@@ -466,6 +467,9 @@ struct NotebookAssistantView: View {
                                 }
                                 Color.clear.frame(height: 1).id("chat-bottom")
                             }
+                            .background(GeometryReader { geometry in
+                                Color.clear.preference(key: NotebookChatHeightKey.self, value: geometry.size.height)
+                            })
                         }.frame(height: panelSize == nil ? min(210, max(50, availableHeight - 175)) : max(20, availableHeight - 175))
                             .accessibilityIdentifier("notebook-chat-history")
                             .simultaneousGesture(DragGesture(minimumDistance: 4).onChanged { _ in followingLatest = false })
@@ -475,6 +479,10 @@ struct NotebookAssistantView: View {
                                 if followingLatest { scrollToLatest(proxy) }
                             }
                             .onChange(of: model.busy) { _, _ in if followingLatest { scrollToLatest(proxy) } }
+                            .onPreferenceChange(NotebookChatHeightKey.self) { _ in
+                                if followingLatest { scrollToLatest(proxy) }
+                            }
+                            .onDisappear { scrollTask?.cancel() }
                     }
                 }
                 if selectingRegion, let pageImage {
@@ -518,8 +526,14 @@ struct NotebookAssistantView: View {
             .onDisappear { if !automation.active { model.cancel() } }
     }
     private func scrollToLatest(_ proxy: ScrollViewProxy) {
-        withAnimation(reduced ? nil : .timingCurve(0.42, 0, 0.58, 1, duration: 0.3)) {
-            proxy.scrollTo("chat-bottom", anchor: .bottom)
+        scrollTask?.cancel()
+        scrollTask = Task { @MainActor in
+            // Wait for the new formula height to enter the scroll view's layout.
+            try? await Task.sleep(for: .milliseconds(60))
+            guard !Task.isCancelled, followingLatest else { return }
+            withAnimation(reduced ? nil : .timingCurve(0.42, 0, 0.58, 1, duration: 0.3)) {
+                proxy.scrollTo("chat-bottom", anchor: .bottom)
+            }
         }
     }
     private var scopeControls: some View {
@@ -552,6 +566,11 @@ struct NotebookAssistantView: View {
         }.buttonStyle(NotebookIconMotion()).accessibilityLabel(label).accessibilityAddTraits(selected ? .isSelected : [])
             .animation(reduced ? nil : .timingCurve(0.42, 0, 0.58, 1, duration: 0.28), value: selected)
     }
+}
+
+private struct NotebookChatHeightKey: PreferenceKey {
+    static var defaultValue: CGFloat = 0
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) { value = max(value, nextValue()) }
 }
 
 private struct NotebookRegionPicker: View {
