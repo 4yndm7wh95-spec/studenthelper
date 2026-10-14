@@ -506,6 +506,10 @@ final class NotebookTests: XCTestCase {
     func testPencilContactLocksTheWholePaperAndRestoresFingerPanAfterLifting() {
         let host = NotebookCanvasHost(frame: CGRect(x: 0, y: 0, width: 768, height: 1000))
         host.layoutSubviews()
+        XCTAssertEqual(host.pageView.canvas.contentInsetAdjustmentBehavior, .never)
+        host.pageView.canvas.contentOffset = CGPoint(x: 4, y: 5)
+        host.pageView.canvas.layoutSubviews()
+        XCTAssertEqual(host.pageView.canvas.contentOffset, .zero)
         let offset = host.scrollView.contentOffset, zoom = host.scrollView.zoomScale
         host.beginInk()
         XCTAssertFalse(host.scrollView.panGestureRecognizer.isEnabled)

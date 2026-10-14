@@ -632,6 +632,9 @@ final class NotebookPKCanvasView: PKCanvasView, UIGestureRecognizerDelegate {
     var onPencilContact: ((NotebookPKCanvasView, Bool) -> Void)?
     override init(frame: CGRect) {
         super.init(frame: frame)
+        contentInsetAdjustmentBehavior = .never
+        contentInset = .zero
+        bounces = false; alwaysBounceHorizontal = false; alwaysBounceVertical = false
         fingerGuard.allowedTouchTypes = [NSNumber(value: UITouch.TouchType.direct.rawValue)]
         fingerGuard.delegate = self
         fingerGuard.cancelsTouchesInView = true
@@ -648,6 +651,8 @@ final class NotebookPKCanvasView: PKCanvasView, UIGestureRecognizerDelegate {
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
     override func layoutSubviews() {
         super.layoutSubviews()
+        // Only the outer page viewport scrolls; PencilKit's nested viewport stays fixed.
+        if contentOffset != .zero { contentOffset = .zero }
         removeInactiveEditingMenus()
     }
     func updateNativeEditingMenus(allow: Bool) {
