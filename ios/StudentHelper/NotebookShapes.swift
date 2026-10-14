@@ -60,7 +60,10 @@ enum NotebookShapes {
                 let h = square ? w : rectangle.height
                 let x = rectangle.midX - w / 2, y = rectangle.midY - h / 2
                 let reverse = CGAffineTransform(rotationAngle: angle)
-                vertices = [CGPoint(x: x, y: y), CGPoint(x: x + w, y: y), CGPoint(x: x + w, y: y + h), CGPoint(x: x, y: y + h)].map { $0.applying(reverse) }
+                let corners = [CGPoint(x: x, y: y), CGPoint(x: x + w, y: y), CGPoint(x: x + w, y: y + h), CGPoint(x: x, y: y + h)].map { $0.applying(reverse) }
+                let beginning = corners.indices.min { distance(corners[$0], vertices[0]) < distance(corners[$1], vertices[0]) }!
+                let clockwise = distance(corners[(beginning + 1) % 4], vertices[1]) < distance(corners[(beginning + 3) % 4], vertices[1])
+                vertices = (0..<4).map { corners[(beginning + (clockwise ? $0 : 4 - $0)) % 4] }
                 return Shape(kind: square ? "square" : "rectangle", points: densify(vertices + [vertices[0]]))
             }
             return Shape(kind: vertices.count == 3 ? "triangle" : "polygon", points: densify(vertices + [vertices[0]]))
@@ -98,8 +101,10 @@ enum NotebookShapes {
         let circle = max(rx, ry) / min(rx, ry) < 1.18
         if circle { rx = (rx + ry) / 2; ry = rx }
         let start = atan2((local[0].y - bounds.midY) / ry, (local[0].x - bounds.midX) / rx)
+        let area = zip(local, local.dropFirst()).reduce(CGFloat.zero) { $0 + $1.0.x * $1.1.y - $1.1.x * $1.0.y }
+        let direction: CGFloat = area >= 0 ? 1 : -1
         let path = (0...96).map { index -> CGPoint in
-            let theta = start + CGFloat(index) / 96 * .pi * 2
+            let theta = start + direction * CGFloat(index) / 96 * .pi * 2
             let p = CGPoint(x: bounds.midX + rx * cos(theta), y: bounds.midY + ry * sin(theta)).applying(rotation.inverted())
             return CGPoint(x: p.x + mean.x, y: p.y + mean.y)
         }

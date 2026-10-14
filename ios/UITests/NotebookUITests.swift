@@ -253,7 +253,7 @@ import UIKit
         XCTAssertTrue(canvas.waitForExistence(timeout: 6)); waitForInk(canvas, contains: "图片1张"); waitForInk(canvas, contains: "手写1笔")
         _ = try await rpc(endpoint, token: token, id: 91, method: "tools/call", params: ["name": "perform_app_action", "arguments": ["action": "write_handwriting", "parameters": ["page_id": pageID, "text": "$a_{n+1}=\\sqrt{2a_n}$\n$\\frac{a_n}{2}>0$", "frame": ["x": 80, "y": 570, "width": 550, "height": 190]]]])
         let handwriting = try await rpc(endpoint, token: token, id: 92, method: "tools/call", params: ["name": "read_ink", "arguments": ["page_id": pageID]])
-        let handwrittenCount = try metadata(handwriting)["total"] as? Int ?? 0
+        let handwrittenCount = try self.metadata(handwriting)["total"] as? Int ?? 0
         XCTAssertGreaterThan(handwrittenCount, 1)
         capture(app, "iPadMCPHandwrittenMath")
         _ = try await rpc(endpoint, token: token, id: 93, method: "tools/call", params: ["name": "perform_app_action", "arguments": ["action": "undo", "parameters": [:]]])
