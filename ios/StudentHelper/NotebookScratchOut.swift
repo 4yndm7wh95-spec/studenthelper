@@ -11,8 +11,22 @@ enum NotebookScratchOut {
     static func apply(to drawing: PKDrawing, baseline: PKDrawing) -> Result? {
         guard !baseline.strokes.isEmpty, drawing.strokes.count == baseline.strokes.count + 1,
               let scratch = drawing.strokes.last, scratch.ink.inkType == .pen,
-              zip(baseline.strokes, drawing.strokes).allSatisfy({ $0.0.path.creationDate == $0.1.path.creationDate }) else { return nil }
-        let points = samples(scratch)
+              zip(baseline.strokes, drawing.strokes).allSatisfy({
+                  abs($0.0.path.creationDate.timeIntervalSince($0.1.path.creationDate)) < 0.01 &&
+                  $0.0.path.count == $0.1.path.count && $0.0.path.first?.location == $0.1.path.first?.location
+              }) else { return nil }
+        // Native curve interpolation can smooth away rapid reversals. Detect
+        // intent from the actual recorded control path, with uniform spacing.
+        let controls = scratch.path.map { $0.location.applying(scratch.transform) }
+        var points: [CGPoint] = []
+        for (a, b) in zip(controls, controls.dropFirst()) {
+            let count = max(1, min(1000, Int(distance(a, b) / 3)))
+            for index in 0..<count {
+                let t = CGFloat(index) / CGFloat(count)
+                points.append(CGPoint(x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t))
+            }
+        }
+        if let last = controls.last { points.append(last) }
         guard points.count >= 16 else { return nil }
         let region = points.reduce(CGRect.null) { $0.union(CGRect(origin: $1, size: CGSize(width: 0.01, height: 0.01))) }
         let span = max(region.width, region.height)

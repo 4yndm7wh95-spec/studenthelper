@@ -156,7 +156,12 @@ final class NotebookAgentTests: XCTestCase {
         XCTAssertTrue(model.applied)
         XCTAssertTrue(store.page(id: page)?.objects.isEmpty == true)
         XCTAssertFalse(store.drawing(for: page).strokes.isEmpty)
-        XCTAssertTrue(store.drawing(for: page).strokes.allSatisfy { $0.ink.color == NotebookHandwriting.red })
+        for stroke in store.drawing(for: page).strokes {
+            var red: CGFloat = 0, green: CGFloat = 0, blue: CGFloat = 0, alpha: CGFloat = 0
+            XCTAssertTrue(stroke.ink.color.getRed(&red, green: &green, blue: &blue, alpha: &alpha))
+            XCTAssertEqual(red, 0.82, accuracy: 0.01); XCTAssertEqual(green, 0.15, accuracy: 0.01)
+            XCTAssertEqual(blue, 0.17, accuracy: 0.01); XCTAssertEqual(alpha, 1, accuracy: 0.01)
+        }
         XCTAssertTrue(store.page(id: foreign)?.objects.isEmpty == true)
         store.undo()
         XCTAssertTrue(store.page(id: page)?.objects.isEmpty == true)

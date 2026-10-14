@@ -211,7 +211,7 @@ import UIKit
         let bookID = try XCTUnwrap(overview["selected_notebook_id"] as? String)
         app.buttons["ask-notebook"].tap()
         _ = try await rpc(endpoint, token: token, id: 40, method: "tools/call", params: ["name": "perform_app_action", "arguments": ["action": "create_page", "parameters": ["notebook_id": bookID, "title": "AI 参考页"]]])
-        XCTAssertEqual(app.staticTexts["chat-page-context"].label, "第 1 页", "AI navigation must preserve the question's chat session")
+        XCTAssertEqual(app.staticTexts["chat-page-context"].label, "AI 参考页", "Notebook chat follows the active page while retaining its session")
         _ = try await rpc(endpoint, token: token, id: 41, method: "tools/call", params: ["name": "perform_app_action", "arguments": ["action": "select_page", "parameters": ["page_id": pageID]]])
         app.buttons["关闭"].tap()
         let image = UIGraphicsImageRenderer(size: CGSize(width: 640, height: 160)).image { output in
