@@ -549,7 +549,13 @@ final class NotebookTests: XCTestCase {
             }
             XCTAssertEqual(try XCTUnwrap(NotebookShapes.recognize(points)).kind, kind)
         }
-        let scratch = (0...120).map { CGPoint(x: 100 + ($0 % 12 < 6 ? $0 % 6 : 12 - $0 % 12) * 15, y: 100 + $0 / 6) }
+        let scratch: [CGPoint] = (0...120).map { index in
+            let phase = index % 12
+            let horizontal = phase < 6 ? phase : 12 - phase
+            let x = CGFloat(100 + horizontal * 15)
+            let y = CGFloat(100 + index / 6)
+            return CGPoint(x: x, y: y)
+        }
         XCTAssertNil(NotebookShapes.recognize(scratch), "Repeated scratch-out must not become a shape")
     }
 
