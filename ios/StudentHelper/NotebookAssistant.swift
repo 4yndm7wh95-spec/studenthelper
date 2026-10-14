@@ -48,6 +48,7 @@ struct NotebookChatEntry: Identifiable {
     let id = UUID()
     let role: String
     let text: String
+    var pageID: UUID? = nil
 }
 
 /// In-process notebook tools. Transport is separate from the editable document engine.
@@ -55,10 +56,10 @@ struct NotebookChatEntry: Identifiable {
 final class NotebookAssistantModel: ObservableObject {
     private static var savedSessions: [UUID: NotebookAssistantModel] = [:]
     static func session(notebookID: UUID, pageID: UUID) -> NotebookAssistantModel {
-        if let existing = savedSessions[pageID] { return existing }
+        if let existing = savedSessions[notebookID] { return existing }
         if savedSessions.count >= 8, let old = savedSessions.first(where: { !$0.value.busy })?.key { savedSessions.removeValue(forKey: old) }
         let model = NotebookAssistantModel(notebookID: notebookID, pageID: pageID)
-        savedSessions[pageID] = model
+        savedSessions[notebookID] = model
         return model
     }
     @Published private(set) var conversation: [NotebookChatEntry] = []
@@ -76,7 +77,7 @@ final class NotebookAssistantModel: ObservableObject {
     private var ocr: [UUID: String] = [:]
     private var reads = 0
     private let notebookID: UUID
-    private let pageID: UUID
+    private var pageID: UUID
     private let configurationOverride: ModelConfiguration?
     private let keyOverride: String?
     private let session: URLSession
@@ -87,6 +88,17 @@ final class NotebookAssistantModel: ObservableObject {
     init(notebookID: UUID, pageID: UUID, configuration: ModelConfiguration? = nil, key: String? = nil, session: URLSession = .shared) {
         self.notebookID = notebookID; self.pageID = pageID
         self.configurationOverride = configuration; self.keyOverride = key; self.session = session
+    }
+    func activate(pageID: UUID) {
+        if self.pageID != pageID { selectedRegion = nil; self.pageID = pageID }
+    }
+    func memoryPageIDs(store: NotebookStore) -> [UUID] {
+        guard let pages = store.notebook(id: notebookID)?.pages, let current = pages.firstIndex(where: { $0.id == pageID }) else { return [] }
+        return pages[max(0, current - 2)...current].map(\.id)
+    }
+    func rememberedConversation(store: NotebookStore) -> [NotebookChatEntry] {
+        let pages = Set(memoryPageIDs(store: store))
+        return conversation.filter { $0.pageID.map { pages.contains($0) } ?? true }
     }
     func cancel() {
         task?.cancel(); task = nil
@@ -102,14 +114,15 @@ final class NotebookAssistantModel: ObservableObject {
             self.automation = automation; self.learning = learning; controlLease = lease
             automation.status = "正在查看题目和你的解法"
         }
-        conversation.append(NotebookChatEntry(role: "user", text: input)); question = ""
+        let questionPageID = pageID
+        conversation.append(NotebookChatEntry(role: "user", text: input, pageID: questionPageID)); question = ""
         answer = ""; proposals = []; revisions = [:]; ocr = [:]; reads = 0; applied = false; error = nil; busy = true
         task = Task {
             defer {
                 busy = false; progress = ""
                 if let controlLease { self.automation?.end(controlLease); self.controlLease = nil }
             }
-            do { let result = try await run(input, store: store); try Task.checkCancellation(); answer = result; conversation.append(NotebookChatEntry(role: "assistant", text: result)) }
+            do { let result = try await run(input, store: store); try Task.checkCancellation(); answer = result; conversation.append(NotebookChatEntry(role: "assistant", text: result, pageID: questionPageID)) }
             catch is CancellationError { proposals = [] }
             catch { if !Task.isCancelled { self.error = error.localizedDescription }; proposals = [] }
         }
@@ -127,6 +140,9 @@ final class NotebookAssistantModel: ObservableObject {
         else { error = store.storageError ?? "修改未能保存，请重试。" }
     }
     func run(_ input: String, store: NotebookStore) async throws -> String {
+        let pageID = self.pageID
+        let memoryPages = memoryPageIDs(store: store)
+        let remembered = rememberedConversation(store: store)
         guard configurationOverride != nil || ModelConfiguration.mode == .direct else { throw NotebookAgentError.serviceMode }
         let configuration = configurationOverride ?? ModelConfiguration.load()
         let key = try keyOverride ?? ModelKeychain().read(for: configuration)
@@ -142,6 +158,7 @@ final class NotebookAssistantModel: ObservableObject {
         你是“一步”的笔记助手。学生用 Apple Pencil 记大学作业笔记，希望从题目里学会做题。
         默认只解决当前一个疑问，用学生能理解的短句；明确要求整理整页时可完整整理。
         当前笔记本ID：\(notebookID)，当前页面ID：\(pageID)。默认围绕这本笔记检查，跨笔记本与其他功能仅在用户要求时操作。
+        当前自动记忆最多三页：当前页及前两页，页面ID为\(memoryPages.map(\.uuidString).joined(separator: ", "))。这是持续的笔记本会话，翻页不代表题目或解法重新开始；结合前两页的题目和步骤续接当前页。默认只使用提供的近三页内容，更早页面仅在用户明确要求时读取。
         \(region == nil ? "问题范围为当前页面。" : "学生已框选区域，优先只解释这一区域；需要周边依据时才读取整页。")
         学生把题目图片放在上方，在下方手写解题。结合整页图片看题目与逐行推导；OCR只是辅助，不是公式的准确转写。
         检查时先指出第一处实质错误，用一句话说清原因，再给这一行的正确写法；后续步骤被该错误连带影响时不要逐行重复批评。没有错误就明确说明。
@@ -155,10 +172,18 @@ final class NotebookAssistantModel: ObservableObject {
         页坐标为原始纸张坐标，与屏幕缩放无关。保留原始笔迹；注释放在空白位置。
         不用生成工具JSON作为最终回答。检查错点时可直接圈画并给简短纠正；仅解释概念时只回答。总结实际完成的变化，不重复整套正确答案，除非学生要求。
         """
-        let prior = conversation.last?.role == "user" && conversation.last?.text == input ? Array(conversation.dropLast()) : conversation
+        let prior = remembered.last?.role == "user" && remembered.last?.text == input ? Array(remembered.dropLast()) : remembered
         var messages: [[String: Any]] = [["role": "system", "content": prompt]]
         messages += prior.suffix(12).map { ["role": $0.role, "content": $0.text] }
         messages.append(["role": "user", "content": "当前页面资料：\n" + initial + "\n\n问题：" + input])
+        for previous in memoryPages where previous != pageID {
+            let context = try await read(previous, store: store)
+            messages.append(["role": "user", "content": "同一题目可能延续的前页资料：\n" + context])
+            if attachPageImage, let page = store.page(id: previous) {
+                let image = try NotebookPageRenderer.checkedImage(page: page, store: store, scale: 1)
+                messages.append(try Self.imageMessage(image, label: "前页\(page.title)，ID：\(previous)。用于衔接当前解法，不能混淆页坐标。"))
+            }
+        }
         if attachPageImage, let page = store.page(id: pageID) {
             let image = try NotebookPageRenderer.checkedImage(page: page, store: store, scale: 1.5)
             messages.append(try Self.imageMessage(image, label: "当前整页：上方题图与下方手写过程；图像坐标按页面尺寸\(page.width)×\(page.height)换算。"))
@@ -458,7 +483,7 @@ struct NotebookAssistantView: View {
                 if model.conversation.isEmpty, let panelSize, panelSize.height > 220 { Spacer(minLength: 0) }
                 scopeControls
                 HStack(alignment: .bottom, spacing: 8) {
-                    TextField("问这页笔记…", text: $model.question, axis: .vertical)
+                    TextField("继续问笔记…", text: $model.question, axis: .vertical)
                         .lineLimit(1...3).font(.subheadline).padding(10)
                         .background(Notebook.surface, in: RoundedRectangle(cornerRadius: 12))
                         .accessibilityIdentifier("notebook-question")
@@ -481,7 +506,9 @@ struct NotebookAssistantView: View {
             .animation(reduced ? nil : .timingCurve(0.42, 0, 0.58, 1, duration: 0.4), value: model.busy)
             .animation(reduced ? nil : .timingCurve(0.42, 0, 0.58, 1, duration: 0.4), value: selectingRegion)
             .animation(reduced ? nil : .timingCurve(0.42, 0, 0.58, 1, duration: 0.4), value: model.conversation.count)
-            .task {
+            .task(id: pageID) {
+                model.activate(pageID: pageID)
+                selectingRegion = false
                 NotificationCenter.default.post(name: .notebookFlushDrawing, object: nil)
                 if let page = store.page(id: pageID) { pageImage = try? NotebookPageRenderer.checkedImage(page: page, store: store) }
             }

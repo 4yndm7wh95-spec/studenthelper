@@ -5,6 +5,38 @@ import UIKit
 
 @MainActor
 final class NotebookAgentTests: XCTestCase {
+    func testNotebookSessionKeepsCrossPageConversationButModelContextOnlyUsesLatestThreePages() async throws {
+        let folder = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: folder); NotebookAgentProtocol.replies = [] }
+        let store = NotebookStore(folder: folder)
+        let book = try XCTUnwrap(store.createNotebook(title: "跨页"))
+        var pages = [try XCTUnwrap(store.currentPage?.id)]
+        for index in 2...4 { pages.append(try XCTUnwrap(store.createPage(notebookID: book, title: "第\(index)页"))) }
+        let firstSession = NotebookAssistantModel.session(notebookID: book, pageID: pages[0])
+        let otherPageSession = NotebookAssistantModel.session(notebookID: book, pageID: pages[1])
+        XCTAssertTrue(firstSession === otherPageSession)
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [NotebookAgentProtocol.self]
+        let model = NotebookAssistantModel(notebookID: book, pageID: pages[0],
+            configuration: ModelConfiguration(address: "https://notebook.test/v1"), key: "unit-test-only", session: URLSession(configuration: configuration))
+        NotebookAgentProtocol.requests = []
+        for index in pages.indices {
+            model.activate(pageID: pages[index])
+            NotebookAgentProtocol.replies = [["role": "assistant", "content": "answer\(index + 1)Unique"]]
+            model.question = "page\(index + 1)UniqueMemory"; model.ask(store: store)
+            for _ in 0..<400 where model.busy { try await Task.sleep(for: .milliseconds(25)) }
+            XCTAssertFalse(model.busy); XCTAssertNil(model.error)
+        }
+        XCTAssertEqual(model.conversation.count, 8, "Visible history survives page switching")
+        XCTAssertEqual(model.memoryPageIDs(store: store), Array(pages.dropFirst()))
+        XCTAssertEqual(model.rememberedConversation(store: store).count, 6)
+        let request = try XCTUnwrap(NotebookAgentProtocol.requests.last)
+        let encoded = String(decoding: try JSONSerialization.data(withJSONObject: request), as: UTF8.self)
+        XCTAssertFalse(encoded.contains("page1UniqueMemory"))
+        XCTAssertFalse(encoded.contains(pages[0].uuidString))
+        XCTAssertTrue(encoded.contains("page2UniqueMemory")); XCTAssertTrue(encoded.contains("page3UniqueMemory"))
+        XCTAssertTrue(encoded.contains("page4UniqueMemory"))
+    }
     func testReplyKeepsHistoryViewAndFollowsDelayedMathHeightToBottom() async throws {
         let folder = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: folder); NotebookAgentProtocol.replies = [] }

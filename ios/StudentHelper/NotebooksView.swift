@@ -351,7 +351,7 @@ private struct NotebookEditorView: View {
                         NotebookChatPanel(available: CGSize(width: max(1, geometry.size.width - 24), height: max(1, geometry.size.height - 24)), viewport: geometry.frame(in: .global)) { panelSize, manualSize in
                             NotebookAssistantView(notebookID: notebookID, pageID: assistantID, availableHeight: manualSize ? panelSize.height : geometry.size.height * 0.75,
                                 panelSize: manualSize ? panelSize : nil, onClose: { assistant = false })
-                        }.id(assistantID)
+                        }.id(notebookID)
                         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
                         .padding(12).transition(.opacity.combined(with: .scale(scale: 0.95, anchor: .bottomTrailing)))
                 }
@@ -404,7 +404,10 @@ private struct NotebookEditorView: View {
         }
         .onChange(of: pageTitleFocused) { _, focused in if !focused { finishTitleEditing() } }
         .onChange(of: book == nil) { _, missing in if missing { dismiss() } }
-        .onChange(of: automation.active) { _, active in if active { finishTitleEditing(); dismissKeyboard() } }
+        .onChange(of: automation.active) { _, active in
+            if active { finishTitleEditing(); dismissKeyboard() }
+            else { assistantPageID = page?.id }
+        }
         .onChange(of: automation.navigationRevision) { _, _ in
             if automation.active { settings = false; textEditor = false; photoImporter = false; fileImporter = false }
         }

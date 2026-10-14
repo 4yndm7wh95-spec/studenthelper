@@ -108,10 +108,12 @@ import UIKit
         XCTAssertFalse(app.buttons["问一步"].isEnabled, "An empty question must not send a model request")
         capture(app, "iPadNotebookAssistant")
         if app.buttons["收起页面列表"].exists { app.buttons["收起页面列表"].tap() }
+        let sizeBeforePageChange = window.frame.size
         openMenu(app.buttons["paper-menu"]); app.buttons["添加页面"].tap()
         let context = app.staticTexts["chat-page-context"]
         let switched = XCTNSPredicateExpectation(predicate: NSPredicate(format: "label == %@", "第 3 页"), object: context)
         XCTAssertEqual(XCTWaiter.wait(for: [switched], timeout: 5), .completed)
+        XCTAssertEqual(window.frame.size, sizeBeforePageChange, "Page switching must retain the chat window")
         app.buttons["关闭"].tap()
         XCTAssertTrue(app.buttons["ask-notebook"].waitForExistence(timeout: 5))
     }
