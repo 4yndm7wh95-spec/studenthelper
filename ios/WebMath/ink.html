@@ -1,0 +1,16 @@
+<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<link rel="stylesheet" href="katex/katex.min.css"><script src="katex/katex.min.js"></script><script src="math-render.js"></script>
+<style>html,body{margin:0;background:white;color:black}#ink{padding:4px;white-space:pre-wrap;font-family:"Kaiti SC","STKaiti","Chalkboard SE",serif;font-size:28px;line-height:1.65;overflow-wrap:break-word}.katex{font-size:1.05em}.katex-display{margin:.15em 0;text-align:left}.katex-display>.katex{text-align:left}.yb-inline-math{white-space:nowrap}svg{color:black}*{animation:none!important;transition:none!important}</style></head><body><div id="ink"></div>
+<script>
+window.prepareInk=async function(text){
+ const output=document.getElementById('ink');
+ // Explicit math delimiters are preferred. Also accept bare a_n / \sqrt{...} lines.
+ const normalized=text.split('\n').map(line=>{
+   if(/\$|\\\(|\\\[/.test(line))return line;
+   return line.split(/([\u3400-\u9fff，。；：！？]+)/).map(part=>/[\\_^=√∫∑]/.test(part)?'$'+part.trim()+'$':part).join('');
+ }).join('\n');
+ output.innerHTML=StudentMath.render(normalized,{cards:false});
+ await document.fonts.ready;await new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));
+ return {height:Math.ceil(output.getBoundingClientRect().height),errors:output.querySelectorAll('.katex-error').length,math:output.querySelectorAll('.katex').length};
+};
+</script></body></html>

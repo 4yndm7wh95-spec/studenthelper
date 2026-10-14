@@ -122,10 +122,13 @@ final class NotebookAgentTests: XCTestCase {
         XCTAssertFalse((appRead["content"] as? String)?.contains("工具未执行") == true)
         model.apply(store: store)
         XCTAssertTrue(model.applied)
-        XCTAssertEqual(store.page(id: page)?.objects.first?.text, "先看这一行")
+        XCTAssertTrue(store.page(id: page)?.objects.isEmpty == true)
+        XCTAssertFalse(store.drawing(for: page).strokes.isEmpty)
+        XCTAssertTrue(store.drawing(for: page).strokes.allSatisfy { $0.ink.color == NotebookHandwriting.red })
         XCTAssertTrue(store.page(id: foreign)?.objects.isEmpty == true)
         store.undo()
         XCTAssertTrue(store.page(id: page)?.objects.isEmpty == true)
+        XCTAssertTrue(store.drawing(for: page).strokes.isEmpty)
     }
 
     func testChangedPageRejectsPendingModelEdits() async throws {

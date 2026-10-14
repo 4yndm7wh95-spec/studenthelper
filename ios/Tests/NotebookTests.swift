@@ -404,6 +404,109 @@ final class NotebookTests: XCTestCase {
         }
         return PKDrawing(strokes: strokes)
     }
+
+    private func stroke(_ points: [CGPoint]) -> PKStroke {
+        PKStroke(ink: PKInk(.pen, color: .black), path: PKStrokePath(controlPoints: points.enumerated().map {
+            PKStrokePoint(location: $0.element, timeOffset: Double($0.offset) * 0.05, size: CGSize(width: 3, height: 3), opacity: 1,
+                force: 1, azimuth: 0, altitude: .pi / 2)
+        }, creationDate: Date()))
+    }
+
+    func testRepeatedUndoThenWritingCannotReceiveOldCanvasInkCallbacks() throws {
+        _ = store.createNotebook(title: "撤销")
+        let page = try XCTUnwrap(store.currentPage)
+        let original = drawing(strokes: 1)
+        XCTAssertTrue(store.updateDrawing(original, pageID: page.id))
+        let host = NotebookCanvasHost(frame: CGRect(x: 0, y: 0, width: 768, height: 1000))
+        let parent = NotebookCanvas(pageID: page.id, store: store)
+        let coordinator = NotebookCanvas.Coordinator(parent: parent)
+        coordinator.host = host; host.pageView.canvas.delegate = coordinator
+        coordinator.update(parent: parent)
+        for index in 0..<3 {
+            let canvas = host.pageView.canvas
+            coordinator.canvasViewDidBeginUsingTool(canvas)
+            let addition = drawing(strokes: index + 3).strokes.last!
+            canvas.drawing = PKDrawing(strokes: original.strokes + [addition])
+            coordinator.canvasViewDrawingDidChange(canvas); coordinator.finishStroke()
+            XCTAssertEqual(store.drawing(for: page.id).strokes.count, 2)
+            coordinator.undo()
+            XCTAssertFalse(host.pageView.canvas === canvas)
+            XCTAssertEqual(store.drawing(for: page.id).strokes.count, 1)
+            coordinator.canvasViewDrawingDidChange(canvas)
+            XCTAssertFalse(coordinator.drawingDirty, "Callbacks from the replaced canvas cannot restore undone ink")
+            XCTAssertEqual(host.pageView.canvas.drawing.strokes.count, 1)
+        }
+        let canvas = host.pageView.canvas
+        coordinator.canvasViewDidBeginUsingTool(canvas)
+        canvas.drawing = PKDrawing(strokes: original.strokes + [drawing(strokes: 6).strokes.last!])
+        coordinator.canvasViewDrawingDidChange(canvas); coordinator.finishStroke()
+        XCTAssertEqual(store.drawing(for: page.id).strokes.count, 2)
+        XCTAssertEqual(store.drawing(for: page.id).strokes.last!.path[0].location.y, 400)
+        XCTAssertFalse(store.canRedo, "A new stroke must replace the undone branch")
+    }
+
+    func testUnchangedImageDoesNotAcquireGeometryAnimationsDuringInkUpdates() throws {
+        _ = store.createNotebook(title: "题图")
+        let page = try XCTUnwrap(store.currentPage)
+        _ = store.addImage(data: try imageData(), name: "题", to: page.id, at: NoteRect(x: 40, y: 40, width: 240, height: 120))
+        let surface = NotebookPageSurface(frame: CGRect(x: 0, y: 0, width: 768, height: 1086))
+        surface.update(page: try XCTUnwrap(store.page(id: page.id)), store: store)
+        let view = try XCTUnwrap(surface.objectLayer.subviews.first as? UIImageView)
+        let initial = view.image, center = view.center
+        for index in 1...4 {
+            XCTAssertTrue(store.updateDrawing(drawing(strokes: index), pageID: page.id))
+            surface.update(page: try XCTUnwrap(store.page(id: page.id)), store: store)
+            XCTAssertTrue(view.image === initial)
+            XCTAssertEqual(view.center, center)
+            XCTAssertFalse(view.layer.animationKeys()?.contains(where: { $0.contains("position") || $0.contains("bounds") }) == true)
+        }
+    }
+
+    func testScratchOutDeletesWholeVisitedStrokeButKeepsNeighborAndIsUndoable() throws {
+        _ = store.createNotebook(title: "涂改")
+        let page = try XCTUnwrap(store.currentPage)
+        let target = stroke([CGPoint(x: 100, y: 115), CGPoint(x: 130, y: 115), CGPoint(x: 170, y: 115)])
+        let neighbor = stroke([CGPoint(x: 220, y: 115), CGPoint(x: 260, y: 115)])
+        let baseline = PKDrawing(strokes: [target, neighbor])
+        let zigzag = stroke((0...8).map { CGPoint(x: $0 % 2 == 0 ? 105 : 165, y: 100 + $0 * 4) })
+        let result = try XCTUnwrap(NotebookScratchOut.apply(to: PKDrawing(strokes: baseline.strokes + [zigzag]), baseline: baseline))
+        XCTAssertEqual(result.drawing.strokes.count, 1)
+        XCTAssertEqual(result.drawing.strokes[0].path[0].location, neighbor.path[0].location)
+        XCTAssertTrue(store.updateDrawing(baseline, pageID: page.id))
+        XCTAssertTrue(store.updateDrawing(result.drawing, pageID: page.id))
+        store.undo(); XCTAssertEqual(store.drawing(for: page.id).strokes.count, 2)
+        store.redo(); XCTAssertEqual(store.drawing(for: page.id).strokes.count, 1)
+        XCTAssertEqual(NotebookStore(folder: folder).drawing(for: page.id).strokes.count, 1)
+    }
+
+    func testNormalCirclesLettersAndScratchOnBlankAreNotErased() {
+        let existing = stroke([CGPoint(x: 100, y: 115), CGPoint(x: 170, y: 115)])
+        let baseline = PKDrawing(strokes: [existing])
+        let circle = stroke((0...30).map { index in
+            let angle = Double(index) / 30 * .pi * 2
+            return CGPoint(x: 135 + 25 * cos(angle), y: 115 + 25 * sin(angle))
+        })
+        let letter = stroke([CGPoint(x: 105, y: 110), CGPoint(x: 120, y: 135), CGPoint(x: 135, y: 110), CGPoint(x: 150, y: 135), CGPoint(x: 165, y: 110)])
+        for normal in [circle, letter] { XCTAssertNil(NotebookScratchOut.apply(to: PKDrawing(strokes: [existing, normal]), baseline: baseline)) }
+        let zigzag = stroke((0...8).map { CGPoint(x: $0 % 2 == 0 ? 300 : 360, y: 100 + $0 * 4) })
+        XCTAssertNil(NotebookScratchOut.apply(to: PKDrawing(strokes: [existing, zigzag]), baseline: baseline))
+    }
+
+    func testRedHandwrittenMathIsNativeInkAndPreservesRadicalSubscriptAndFraction() async throws {
+        _ = store.createNotebook(title: "红笔")
+        let page = try XCTUnwrap(store.currentPage)
+        let ink = try await NotebookHandwriting.drawing(text: "检查这一步\n$a_{n+1}=\\sqrt{2a_n}$\n$\\frac{a_n}{2}>0$", frame: CGRect(x: 64, y: 100, width: 430, height: 190))
+        XCTAssertFalse(ink.strokes.isEmpty)
+        XCTAssertTrue(ink.strokes.allSatisfy { $0.ink.color == NotebookHandwriting.red })
+        XCTAssertLessThanOrEqual(ink.bounds.maxY, 290)
+        XCTAssertGreaterThan(ink.bounds.height, 65)
+        XCTAssertNotNil(store.apply(.appendInk(pageID: page.id, data: ink.dataRepresentation())))
+        XCTAssertTrue(store.page(id: page.id)?.objects.isEmpty == true)
+        let image = try NotebookPageRenderer.checkedImage(page: try XCTUnwrap(store.page(id: page.id)), store: store)
+        let attachment = XCTAttachment(image: image); attachment.name = "iPadRedHandwrittenMath"; attachment.lifetime = .keepAlways; add(attachment)
+        store.undo(); XCTAssertTrue(store.drawing(for: page.id).strokes.isEmpty)
+        store.redo(); XCTAssertEqual(store.drawing(for: page.id).strokes.count, ink.strokes.count)
+    }
     private func imageData(size: CGSize = CGSize(width: 120, height: 60)) throws -> Data {
         let format = UIGraphicsImageRendererFormat(); format.scale = 1; format.opaque = false
         let image = UIGraphicsImageRenderer(size: size, format: format).image { context in

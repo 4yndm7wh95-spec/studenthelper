@@ -149,6 +149,7 @@ final class NotebookAssistantModel: ObservableObject {
         按需用list_pages、read_page、search_notes找内容，不宣称读过没有读取的页面。
         用户要求跨笔记本时，用list_notebooks、list_notebook_pages、read_notebook_page、search_notebook读取目标本；read_app_state读取其他软件功能的状态。
         用户已允许你操作App，可通过perform_app_action调用真实功能，包含圈画、书写、翻页、滚动和整理。优先以温和红色圈出错点或画短下划线，并在邻近空白添加简短纠正；只在能准确定位时圈画。
+        添加纠正内容必须用write_handwriting动作或propose_annotation，它们会生成红色原生笔迹。数学公式用$…$或\\(…\\)包围，根号用\\sqrt{…}、分式用\\frac{…}{…}、上下标用a_{n}等完整LaTeX；软件排版后写成可读的数学符号。不要使用add_text写纠正公式，不将a_n或反斜杠命令作为普通文字写在纸上。批注要短，放在空白处，不遮挡学生解法。
         原始解题过程必须保留。不要擅自删除、擦掉、覆盖学生的笔迹或题图，只有用户明确要求时才删除原内容。
         不确定的内容编辑可通过propose工具提出，用户点“应用修改”之后才生效。以工具实际结果为准，失败时不能宣称成功。
         页坐标为原始纸张坐标，与屏幕缩放无关。保留原始笔迹；注释放在空白位置。
@@ -273,7 +274,8 @@ final class NotebookAssistantModel: ObservableObject {
         case "propose_annotation":
             let text = String(try Self.string("text", args).prefix(1600))
             let frame = try Self.frame(args).clamped(pageWidth: page.width, pageHeight: page.height)
-            proposal = NoteProposal(description: "在\(page.title)的 (\(Int(frame.x)), \(Int(frame.y))) 添加注释：\(text)", action: .addText(pageID: id, text: text, frame: frame))
+            let ink = try await NotebookHandwriting.drawing(text: text, frame: frame.cgRect)
+            proposal = NoteProposal(description: "在\(page.title)添加红色手写批注", action: .appendInk(pageID: id, data: ink.dataRepresentation()))
         case "propose_create_page":
             let title = String(try Self.string("title", args).prefix(80))
             proposal = NoteProposal(description: "在\(page.title)之后新建“\(title)”", action: .createPage(notebookID: notebookID, afterPageID: id, title: title, paper: page.paper))
@@ -364,7 +366,7 @@ final class NotebookAssistantModel: ObservableObject {
             tool("read_page", "读取页面对象结构与本机OCR。", page),
             tool("read_region", "读取指定矩形中的内容与OCR，坐标为原始纸张坐标。", page.merging(geometry) { _, b in b }),
             tool("search_notes", "按关键词检索12页；offset分页，OCR可能漏字。", ["query": string, "offset": ["type": "integer", "minimum": 0]], optional: ["offset"]),
-            tool("propose_annotation", "提出添加文本注释，用户应用后才生效。", page.merging(["text": string]) { _, b in b }.merging(geometry) { _, b in b }),
+            tool("propose_annotation", "提出添加红色原生手写批注，公式用$…$表示；用户应用后生效。", page.merging(["text": string]) { _, b in b }.merging(geometry) { _, b in b }),
             tool("propose_create_page", "提出在指定页面之后新建一页。", page.merging(["title": string]) { _, b in b }),
             tool("propose_paper", "提出切换纸张。", page.merging(["paper": ["type": "string", "enum": NotePaper.allCases.map(\.rawValue)]]) { _, b in b }),
             tool("propose_move_object", "提出移动或缩放已有图片/注释。", page.merging(["object_id": string]) { _, b in b }.merging(geometry) { _, b in b }),

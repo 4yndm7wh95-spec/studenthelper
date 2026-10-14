@@ -79,6 +79,7 @@ struct NotebookCanvas: UIViewRepresentable {
 
     static func dismantleUIView(_ uiView: NotebookCanvasHost, coordinator: Coordinator) {
         coordinator.stopAutomation()
+        coordinator.finishStroke()
         coordinator.flushDrawing()
         coordinator.endDrawingGroup()
         coordinator.pendingSave?.cancel()
@@ -98,6 +99,10 @@ struct NotebookCanvas: UIViewRepresentable {
         var drawingDirty = false
         var groupingDrawing = false
         var pendingSave: DispatchWorkItem?
+        var strokeCompletion: DispatchWorkItem?
+        var strokeBaseline: PKDrawing?
+        var configuredCanvas: NotebookPKCanvasView?
+        var configuredSettings: (NotebookDrawingTool, UIColor, CGFloat)?
         var lastUndoTrigger: Int
         var lastRedoTrigger: Int
         var lastUndoState: (Bool, Bool)?
@@ -124,6 +129,7 @@ struct NotebookCanvas: UIViewRepresentable {
                 forName: UIApplication.willResignActiveNotification, object: nil, queue: .main
             ) { [weak self] _ in
                 MainActor.assumeIsolated {
+                    self?.finishStroke()
                     _ = self?.flushDrawing()
                     self?.endDrawingGroup()
                 }
@@ -155,6 +161,7 @@ struct NotebookCanvas: UIViewRepresentable {
             let changedPage = loadedPageID != parent.pageID
             if changedPage {
                 stopAutomation()
+                finishStroke()
                 flushDrawing()
                 endDrawingGroup()
                 usingTool = false
@@ -164,10 +171,9 @@ struct NotebookCanvas: UIViewRepresentable {
             }
             self.parent = parent
             guard let host, let page = parent.store.page(id: parent.pageID) else { return }
-            let canvas = host.pageView.canvas
             if changedPage || (!drawingDirty && !usingTool && loadedAsset != page.drawingAsset) {
                 applyingDrawing = true
-                canvas.drawing = parent.store.drawing(for: page.id)
+                host.pageView.replaceCanvas(drawing: parent.store.drawing(for: page.id))
                 applyingDrawing = false
                 loadedAsset = page.drawingAsset
                 if changedPage {
@@ -177,6 +183,7 @@ struct NotebookCanvas: UIViewRepresentable {
                     host.resetPageViewport()
                 }
             }
+            let canvas = host.pageView.canvas
             host.setPageSize(page.size)
             host.pageView.update(page: page, store: parent.store)
             if !changedPage, let added = page.objects.last(where: { !loadedObjects.contains($0.id) }) {
@@ -188,7 +195,7 @@ struct NotebookCanvas: UIViewRepresentable {
             if previousParentTool != parent.tool || previousParentWidth != parent.lineWidth || previousParentColor != color || previousParentFinger != parent.allowsFingerDrawing { automatedTool = nil }
             previousParentTool = parent.tool; previousParentWidth = parent.lineWidth; previousParentColor = color; previousParentFinger = parent.allowsFingerDrawing
             let settings = automatedTool ?? (parent.tool, color, parent.lineWidth, Optional(parent.allowsFingerDrawing))
-            configureTool(settings.0, color: settings.1, width: settings.2, fingerDrawing: settings.3)
+            if !usingTool { configureTool(settings.0, color: settings.1, width: settings.2, fingerDrawing: settings.3) }
             // Object touch editing is explicit: Pencil keeps the native stroke lasso.
             host.pageView.selection.isUserInteractionEnabled = !usingTool && !parent.store.isStorageReadOnly
             canvas.isUserInteractionEnabled = !parent.store.isStorageReadOnly
@@ -208,6 +215,9 @@ struct NotebookCanvas: UIViewRepresentable {
         func configureTool(_ tool: NotebookDrawingTool, color: UIColor, width: CGFloat, fingerDrawing: Bool?) {
             guard let host else { return }
             let canvas = host.pageView.canvas
+            if configuredCanvas === canvas, let configuredSettings,
+               configuredSettings.0 == tool, configuredSettings.1 == color, configuredSettings.2 == width { return }
+            configuredCanvas = canvas; configuredSettings = (tool, color, width)
             canvas.drawingPolicy = .pencilOnly
             canvas.drawingGestureRecognizer.allowedTouchTypes = [NSNumber(value: UITouch.TouchType.pencil.rawValue)]
             switch tool {
@@ -289,10 +299,13 @@ struct NotebookCanvas: UIViewRepresentable {
         }
 
         func canvasViewDidBeginUsingTool(_ canvasView: PKCanvasView) {
+            guard canvasView === host?.pageView.canvas else { return }
+            finishStroke()
             // A preceding native lasso/menu edit may still be awaiting its
             // debounced save. Commit it before opening the next stroke's group.
             flushDrawing()
             usingTool = true
+            strokeBaseline = canvasView.drawing
             host?.pageView.selection.select(nil)
             host?.pageView.selection.isUserInteractionEnabled = false
             if !groupingDrawing {
@@ -302,7 +315,7 @@ struct NotebookCanvas: UIViewRepresentable {
         }
 
         func canvasViewDrawingDidChange(_ canvasView: PKCanvasView) {
-            guard !applyingDrawing else { return }
+            guard canvasView === host?.pageView.canvas, !applyingDrawing else { return }
             drawingDirty = true
             pendingSave?.cancel()
             // Native lasso menu actions can change ink outside a tool touch sequence.
@@ -315,6 +328,28 @@ struct NotebookCanvas: UIViewRepresentable {
         }
 
         func canvasViewDidEndUsingTool(_ canvasView: PKCanvasView) {
+            guard canvasView === host?.pageView.canvas else { return }
+            strokeCompletion?.cancel()
+            let completion = DispatchWorkItem { [weak self] in
+                MainActor.assumeIsolated { self?.finishStroke() }
+            }
+            strokeCompletion = completion
+            DispatchQueue.main.async(execute: completion)
+        }
+
+        func finishStroke() {
+            strokeCompletion?.cancel(); strokeCompletion = nil
+            guard usingTool, let host else { return }
+            if let baseline = strokeBaseline, let ink = host.pageView.canvas.tool as? PKInkingTool, ink.inkType == .pen,
+               let erased = NotebookScratchOut.apply(to: host.pageView.canvas.drawing, baseline: baseline) {
+                applyingDrawing = true
+                host.pageView.replaceCanvas(drawing: erased.drawing)
+                applyingDrawing = false
+                host.pageView.showOperationRegion(NoteRect(erased.region))
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { [weak host] in host?.pageView.showOperationRegion(nil) }
+                drawingDirty = true
+            }
+            strokeBaseline = nil
             usingTool = false
             flushDrawing()
             endDrawingGroup()
@@ -342,6 +377,7 @@ struct NotebookCanvas: UIViewRepresentable {
         }
 
         func undo() {
+            finishStroke()
             guard flushDrawing() else { return }
             endDrawingGroup()
             parent.store.undo()
@@ -349,6 +385,7 @@ struct NotebookCanvas: UIViewRepresentable {
         }
 
         func redo() {
+            finishStroke()
             guard flushDrawing() else { return }
             endDrawingGroup()
             parent.store.redo()
@@ -358,7 +395,9 @@ struct NotebookCanvas: UIViewRepresentable {
         func reloadDrawing() {
             guard let pageID = loadedPageID, let host, let page = parent.store.page(id: pageID) else { return }
             applyingDrawing = true
-            host.pageView.canvas.drawing = parent.store.drawing(for: pageID)
+            pendingSave?.cancel(); pendingSave = nil
+            drawingDirty = false
+            host.pageView.replaceCanvas(drawing: parent.store.drawing(for: pageID))
             applyingDrawing = false
             loadedAsset = page.drawingAsset
             host.pageView.update(page: page, store: parent.store)
@@ -516,7 +555,8 @@ final class NotebookCanvasHost: UIView {
         let size = CGSize(width: pageSize.width * scrollView.zoomScale, height: pageSize.height * scrollView.zoomScale)
         let horizontal = max(0, (scrollView.bounds.width - size.width) / 2)
         let vertical = max(0, (scrollView.bounds.height - size.height) / 2)
-        scrollView.contentInset = UIEdgeInsets(top: vertical, left: horizontal, bottom: vertical, right: horizontal)
+        let insets = UIEdgeInsets(top: vertical, left: horizontal, bottom: vertical, right: horizontal)
+        if scrollView.contentInset != insets { scrollView.contentInset = insets }
     }
 }
 
@@ -615,7 +655,7 @@ final class NotebookFingerNavigationGesture: UIGestureRecognizer {
 final class NotebookPageSurface: UIView {
     let paper = NotebookPaperView()
     let objectLayer = UIView()
-    let canvas = NotebookPKCanvasView()
+    private(set) var canvas = NotebookPKCanvasView()
     let selection = NotebookObjectSelection()
     private let operationHighlight = CAShapeLayer()
     private var objectViews: [UUID: UIView] = [:]
@@ -633,6 +673,7 @@ final class NotebookPageSurface: UIView {
         operationHighlight.strokeColor = UIColor(Notebook.accent).cgColor
         operationHighlight.lineWidth = 2
         operationHighlight.lineDashPattern = [6, 4]
+        operationHighlight.opacity = 0
         paper.isUserInteractionEnabled = false
         objectLayer.isUserInteractionEnabled = false
         canvas.backgroundColor = .clear
@@ -647,6 +688,31 @@ final class NotebookPageSurface: UIView {
     }
 
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
+
+    func replaceCanvas(drawing: PKDrawing) {
+        let old = canvas
+        let delegate = old.delegate
+        old.delegate = nil
+        old.drawingGestureRecognizer.isEnabled = false
+        let replacement = NotebookPKCanvasView(frame: bounds)
+        replacement.backgroundColor = .clear; replacement.isOpaque = false
+        replacement.overrideUserInterfaceStyle = .light
+        replacement.isScrollEnabled = false
+        replacement.minimumZoomScale = 1; replacement.maximumZoomScale = 1
+        replacement.contentSize = bounds.size
+        replacement.drawingPolicy = .pencilOnly
+        replacement.drawingGestureRecognizer.allowedTouchTypes = [NSNumber(value: UITouch.TouchType.pencil.rawValue)]
+        replacement.tool = old.tool
+        replacement.onUndo = old.onUndo; replacement.onRedo = old.onRedo
+        replacement.canUndoNotebook = old.canUndoNotebook; replacement.canRedoNotebook = old.canRedoNotebook
+        replacement.isUserInteractionEnabled = old.isUserInteractionEnabled
+        replacement.drawing = drawing
+        replacement.updateNativeEditingMenus(allow: old.tool is PKLassoTool)
+        canvas = replacement
+        insertSubview(replacement, belowSubview: selection)
+        old.removeFromSuperview()
+        replacement.delegate = delegate
+    }
 
     override func point(inside point: CGPoint, with event: UIEvent?) -> Bool {
         if selection.hitTest(selection.convert(point, from: self), with: event) != nil { return true }
@@ -681,7 +747,9 @@ final class NotebookPageSurface: UIView {
             switch object.content {
             case .image(let asset):
                 let imageView = (objectViews[object.id] as? UIImageView) ?? UIImageView()
-                imageView.image = store.image(for: asset)
+                if objectViews[object.id] == nil || objects.first(where: { $0.id == object.id })?.image != asset {
+                    imageView.image = store.image(for: asset)
+                }
                 imageView.contentMode = .scaleToFill
                 imageView.clipsToBounds = true
                 view = imageView
@@ -704,8 +772,12 @@ final class NotebookPageSurface: UIView {
                 view.center = CGPoint(x: r.midX, y: r.midY)
                 view.transform = CGAffineTransform(rotationAngle: CGFloat(object.angle))
             }
-            if view.bounds.isEmpty || UIAccessibility.isReduceMotionEnabled { changes() }
-            else { UIView.animate(withDuration: 0.38, delay: 0, options: [.curveEaseInOut, .beginFromCurrentState, .allowUserInteraction], animations: changes) }
+            let geometryChanged = view.bounds.size != r.size || view.center != CGPoint(x: r.midX, y: r.midY)
+                || view.transform != CGAffineTransform(rotationAngle: CGFloat(object.angle))
+            if geometryChanged {
+                if view.bounds.isEmpty || UIAccessibility.isReduceMotionEnabled { changes() }
+                else { UIView.animate(withDuration: 0.38, delay: 0, options: [.curveEaseInOut, .beginFromCurrentState, .allowUserInteraction], animations: changes) }
+            }
         }
         objects = page.objects
         selection.update(objects: page.objects)
@@ -720,8 +792,15 @@ final class NotebookPageSurface: UIView {
 
     func showOperationRegion(_ region: NoteRect?) {
         CATransaction.begin(); CATransaction.setDisableActions(true)
-        operationHighlight.path = region.map { UIBezierPath(roundedRect: $0.cgRect, cornerRadius: 8).cgPath }
+        if let region { operationHighlight.path = UIBezierPath(roundedRect: region.cgRect, cornerRadius: 8).cgPath }
+        let fade = CABasicAnimation(keyPath: "opacity")
+        fade.fromValue = operationHighlight.presentation()?.opacity ?? operationHighlight.opacity
+        fade.toValue = region == nil ? 0 : 1
+        fade.duration = UIAccessibility.isReduceMotionEnabled ? 0 : 0.24
+        fade.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+        operationHighlight.opacity = region == nil ? 0 : 1
         CATransaction.commit()
+        operationHighlight.add(fade, forKey: "region-fade")
     }
 }
 

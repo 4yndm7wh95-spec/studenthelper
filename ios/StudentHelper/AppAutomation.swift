@@ -247,6 +247,16 @@ final class AppAutomation: ObservableObject {
             }
         case .setPaper:
             let page = try Self.page(args, notebooks); notebooks.setPaper(try Self.paper(args), pageID: page.id)
+        case .writeHandwriting:
+            let page = try Self.page(args, notebooks), frame = try Self.rect(args["frame"], page: page)
+            operationRegion = frame; try show(page: page, notebooks: notebooks)
+            let ink = try await NotebookHandwriting.drawing(text: Self.string(args, "text", maximum: 1600), frame: frame.cgRect)
+            try ensure(session)
+            NotificationCenter.default.post(name: .notebookFlushDrawing, object: nil)
+            guard notebooks.apply(.appendInk(pageID: page.id, data: ink.dataRepresentation())) != nil else {
+                throw AppAutomationError.failed(notebooks.storageError ?? "手写批注未保存")
+            }
+            result["stroke_count"] = ink.strokes.count; result["color"] = "#D1262B"; result["kind"] = "native_ink"
         case .addText:
             let page = try Self.page(args, notebooks), frame = try Self.rect(args["frame"], page: page)
             guard page.objects.count < 2000 else { throw AppAutomationError.invalid("页面内容数量已达到上限") }
@@ -522,7 +532,7 @@ final class AppAutomation: ObservableObject {
         case createNotebook = "create_notebook", renameNotebook = "rename_notebook", deleteNotebook = "delete_notebook", selectNotebook = "select_notebook", reorderNotebooks = "reorder_notebooks"
         case createPage = "create_page", renamePage = "rename_page", deletePage = "delete_page", selectPage = "select_page", reorderPages = "reorder_pages"
         case setPaper = "set_paper", addText = "add_text", updateText = "update_text", setObjectFrame = "set_object_frame", deleteObject = "delete_object", addImage = "add_image"
-        case drawStroke = "draw_stroke", eraseStrokes = "erase_strokes", moveStrokes = "move_strokes", setTool = "set_tool", scrollViewport = "scroll_viewport", zoomViewport = "zoom_viewport", undo, redo
+        case drawStroke = "draw_stroke", writeHandwriting = "write_handwriting", eraseStrokes = "erase_strokes", moveStrokes = "move_strokes", setTool = "set_tool", scrollViewport = "scroll_viewport", zoomViewport = "zoom_viewport", undo, redo
         case addCourse = "add_course", deleteCourse = "delete_course", selectCourse = "select_course", setCourseSubject = "set_course_subject", setCourseNotes = "set_course_notes"
         case newChat = "new_chat", selectChat = "select_chat", renameChat = "rename_chat", deleteChat = "delete_chat", clearChats = "clear_chats", setChatDraft = "set_chat_draft", sendMessage = "send_message", retryReply = "retry_reply", stopReply = "stop_reply", nextQuestion = "next_question", skipPacing = "skip_pacing"
         case setReview = "set_review", addCourseFile = "add_course_file", importLearningImage = "import_learning_image", removeDraftImage = "remove_draft_image", removeFile = "remove_file", useFileImage = "use_file_image"
@@ -534,7 +544,7 @@ final class AppAutomation: ObservableObject {
             case .eraseStrokes: return "正在擦去选中的笔迹"
             case .moveStrokes: return "正在调整笔迹的位置"
             case .addImage, .setObjectFrame: return "正在整理题图"
-            case .addText, .updateText: return "正在写下这一步的说明"
+            case .writeHandwriting, .addText, .updateText: return "正在写下这一步的说明"
             case .selectPage, .createPage: return "正在翻到笔记页面"
             case .scrollViewport, .zoomViewport: return "正在调整纸张的位置"
             case .sendMessage, .retryReply, .nextQuestion: return "正在继续教题"
@@ -557,7 +567,7 @@ final class AppAutomation: ObservableObject {
             case .deletePage, .selectPage: return ["page_id"]
             case .reorderPages: return ["notebook_id", "ids"]
             case .setPaper: return ["page_id", "paper"]
-            case .addText: return ["page_id", "text", "frame"]
+            case .addText, .writeHandwriting: return ["page_id", "text", "frame"]
             case .updateText: return ["page_id", "object_id", "text"]
             case .setObjectFrame: return ["page_id", "object_id", "frame", "rotation"]
             case .deleteObject: return ["page_id", "object_id"]
@@ -722,7 +732,7 @@ final class AppAutomation: ObservableObject {
             if action == .importLearningImage { required.remove("chat_id"); required.remove("course") }
             if [.createNotebook, .renameNotebook, .renamePage, .renameChat].contains(action) { required.insert("title") }
             if [.addCourse, .deleteCourse, .selectCourse, .setCourseSubject, .setCourseNotes, .addCourseFile].contains(action) { required.insert("course") }
-            if [.addText, .setObjectFrame].contains(action) { required.insert("frame") }
+            if [.addText, .writeHandwriting, .setObjectFrame].contains(action) { required.insert("frame") }
             if action == .setPaper { required.insert("paper") }
             return ["type": "object", "properties": ["action": ["type": "string", "const": action.rawValue], "parameters": ["type": "object", "properties": properties, "required": required.sorted(), "additionalProperties": false]], "required": ["action", "parameters"], "additionalProperties": false]
         }

@@ -28,7 +28,7 @@ if [[ "${IPAD_TEST_SCOPE:-all}" == "windows" ]]; then
   TEST_TARGETS=(-only-testing:StudentHelperUITests/NotebookUITests/testNotebookPagePaperAndAssistantThroughUI)
 fi
 if [[ "${IPAD_TEST_SCOPE:-all}" == "touch" ]]; then
-  TEST_TARGETS=(-only-testing:StudentHelperTests/NotebookTests -only-testing:StudentHelperTests/NotebookAgentTests -only-testing:StudentHelperUITests/NotebookUITests/testMCPImportsProblemDrawsCorrectionAndUserCanStop -only-testing:StudentHelperUITests/NotebookUITests/testNotebookPagePaperAndAssistantThroughUI -only-testing:StudentHelperUITests/NotebookUITests/testSingleFingerPanAndLargeSwipeTurnPagesWithoutInk)
+  TEST_TARGETS=(-only-testing:StudentHelperTests/NotebookTests -only-testing:StudentHelperTests/NotebookAgentTests -only-testing:StudentHelperTests/AppAutomationTests -only-testing:StudentHelperUITests/NotebookUITests/testMCPImportsProblemDrawsCorrectionAndUserCanStop -only-testing:StudentHelperUITests/NotebookUITests/testNotebookPagePaperAndAssistantThroughUI -only-testing:StudentHelperUITests/NotebookUITests/testSingleFingerPanAndLargeSwipeTurnPagesWithoutInk)
 fi
 if [[ "${IPAD_TEST_SCOPE:-all}" == "menus" ]]; then
   TEST_TARGETS=(-only-testing:StudentHelperTests/NotebookTests -only-testing:StudentHelperUITests/NotebookUITests/testMCPImportsProblemDrawsCorrectionAndUserCanStop)

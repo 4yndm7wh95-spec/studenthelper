@@ -149,6 +149,7 @@ enum NoteAction: Equatable {
     case renameNotebook(notebookID: UUID, title: String)
     case setPaper(pageID: UUID, paper: NotePaper)
     case addText(pageID: UUID, text: String, frame: NoteRect)
+    case appendInk(pageID: UUID, data: Data)
     case updateText(pageID: UUID, objectID: UUID, text: String)
     case setObjectFrame(pageID: UUID, objectID: UUID, frame: NoteRect)
     case setObjectTransform(pageID: UUID, objectID: UUID, frame: NoteRect, rotation: Double)

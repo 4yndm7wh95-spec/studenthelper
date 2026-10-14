@@ -349,7 +349,7 @@ final class NotebookStore: ObservableObject {
         default:
             let pageID: UUID
             switch action {
-            case .renamePage(let id, _), .setPaper(let id, _), .addText(let id, _, _),
+            case .renamePage(let id, _), .setPaper(let id, _), .addText(let id, _, _), .appendInk(let id, _),
                  .updateText(let id, _, _), .setObjectFrame(let id, _, _), .setObjectTransform(let id, _, _, _), .deleteObject(let id, _): pageID = id
             default: throw NoteStorageError.missingPage
             }
@@ -362,6 +362,15 @@ final class NotebookStore: ObservableObject {
                 let page = next.notebooks[n].pages[p]
                 let object = NoteObject(frame: try frame.clamped(pageWidth: page.width, pageHeight: page.height), content: .text(NoteText(text: text)))
                 next.notebooks[n].pages[p].objects.append(object); objectID = object.id
+            case .appendInk(_, let data):
+                guard data.count <= 8 * 1024 * 1024 else { throw NoteStorageError.invalidAsset }
+                let ink = try PKDrawing(data: data)
+                let page = next.notebooks[n].pages[p]
+                let old = try repository.drawing(for: page)
+                let combined = PKDrawing(strokes: old.strokes + ink.strokes)
+                let asset = try repository.saveDrawing(combined, pageID: page.id)
+                next.notebooks[n].pages[p].drawingAsset = asset
+                next.notebooks[n].pages[p].drawingChecksum = NoteRepository.checksum(combined.dataRepresentation())
             case .updateText(_, let id, let text):
                 let o = try objectIndex(id, page: next.notebooks[n].pages[p])
                 guard case .text(var value) = next.notebooks[n].pages[p].objects[o].content else { throw NoteStorageError.missingObject }
