@@ -31,7 +31,16 @@ final class NotebookHandwriting: NSObject, WKNavigationDelegate {
         }
         if let navigationError { throw navigationError }
         guard ready else { throw NotebookAgentError.unreadable }
-        let layout = try await web.callAsyncJavaScript("return await window.prepareInk(text);", arguments: ["text": text], in: nil, contentWorld: .page) as? [String: Any]
+        let encoded = try JSONSerialization.data(withJSONObject: [text])
+        let literal = String(decoding: encoded, as: UTF8.self)
+        _ = try await evaluate(web, "window.inkLayout=null; window.prepareInk(\(literal)[0]).then(value=>window.inkLayout=value).catch(()=>window.inkLayout={errors:1}); null;")
+        var layout: [String: Any]?
+        for _ in 0..<240 {
+            try Task.checkCancellation()
+            layout = try await evaluate(web, "window.inkLayout") as? [String: Any]
+            if layout != nil { break }
+            try await Task.sleep(for: .milliseconds(25))
+        }
         guard let height = (layout?["height"] as? NSNumber)?.doubleValue, height > 0, height <= 1500,
               (layout?["errors"] as? NSNumber)?.intValue == 0 else {
             throw AppAutomationError.invalid("公式无法正确排版，请使用完整的LaTeX公式并用$或\\(…\\)包围，不写原始公式代码。")
@@ -41,7 +50,13 @@ final class NotebookHandwriting: NSObject, WKNavigationDelegate {
         let configuration = WKSnapshotConfiguration()
         configuration.rect = CGRect(x: 0, y: 0, width: width, height: height)
         configuration.snapshotWidth = NSNumber(value: width * 2)
-        let image = try await web.takeSnapshot(configuration: configuration)
+        let image: UIImage = try await withCheckedThrowingContinuation { continuation in
+            web.takeSnapshot(with: configuration) { image, error in
+                if let error { continuation.resume(throwing: error) }
+                else if let image { continuation.resume(returning: image) }
+                else { continuation.resume(throwing: NotebookAgentError.unreadable) }
+            }
+        }
         try Task.checkCancellation()
         guard let cg = image.cgImage else { throw NotebookAgentError.unreadable }
         let pixels = Self.mask(cg)
@@ -67,6 +82,15 @@ final class NotebookHandwriting: NSObject, WKNavigationDelegate {
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) { ready = true }
     func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) { navigationError = error }
     func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) { navigationError = error }
+
+    private func evaluate(_ web: WKWebView, _ script: String) async throws -> Any? {
+        try await withCheckedThrowingContinuation { continuation in
+            web.evaluateJavaScript(script) { value, error in
+                if let error { continuation.resume(throwing: error) }
+                else { continuation.resume(returning: value) }
+            }
+        }
+    }
 
     private static func mask(_ image: CGImage) -> [UInt8] {
         var pixels = [UInt8](repeating: 255, count: image.width * image.height)
